@@ -41,22 +41,40 @@ export function describeMedia(name: string, data: Uint8Array): MediaInfo {
   return { ...base, kind: 'other', optimizable: false, note: kind === 'unknown' ? `${ext.toUpperCase()} left untouched` : 'extension does not match content; left untouched' }
 }
 
-/** Checks the package is the expected, non-macro OOXML format and returns the parsed parts. */
+/** Checks the package is the expected, macro-free, unencrypted file of this format and returns its parts. */
 export function readOfficePackage(bytes: Uint8Array, format: OfficeFormat, fileName: string): ZipFile[] {
   if (MACRO_EXTENSIONS.test(fileName)) throw fail('Macro-enabled files (DOCM, XLSM, PPTM) are not supported.')
   const def = OFFICE[format]
+  const ext = format.toUpperCase()
   const dir = listZipEntries(bytes, ARCHIVE_LIMITS)
   const names = new Set(dir.map((e) => e.name))
-  if (!names.has('[Content_Types].xml') || !names.has(def.mainPart)) throw fail(`This does not look like a valid ${format.toUpperCase()} file.`)
-  if ([...names].some((n) => /vbaProject\.bin$/i.test(n))) throw fail('This file contains macros (VBA). Macro-enabled files are not supported.')
+  const invalid = () => fail(`This does not look like a valid ${ext} file.`)
+  if (def.family === 'ooxml') {
+    if (!names.has('[Content_Types].xml') || !names.has(def.mainPart)) throw invalid()
+    if ([...names].some((n) => /vbaProject\.bin$/i.test(n))) throw fail('This file contains macros (VBA). Macro-enabled files are not supported.')
+  } else {
+    if (dir[0]?.name !== 'mimetype' || !names.has(def.mainPart)) throw invalid()
+    if (def.family === 'odf' && (!names.has('content.xml') || !names.has('META-INF/manifest.xml'))) throw invalid()
+    if (def.family === 'odf' && [...names].some((n) => n.startsWith('Scripts/') || n.startsWith('Basic/'))) throw fail('This file contains macros or scripts. Files with macros are not supported.')
+  }
   const files = readZip(bytes, ARCHIVE_LIMITS)
-  const types = new TextDecoder().decode(files.find((f) => f.name === '[Content_Types].xml')?.data ?? new Uint8Array())
-  if (/macroEnabled/i.test(types)) throw fail('This file is macro-enabled. Macro-enabled files are not supported.')
-  if (!types.includes(def.mainContentType)) throw fail(`This does not look like a valid ${format.toUpperCase()} file.`)
+  const text = (n: string) => new TextDecoder().decode(files.find((f) => f.name === n)?.data ?? new Uint8Array())
+  if (def.family === 'ooxml') {
+    const types = text('[Content_Types].xml')
+    if (/macroEnabled/i.test(types)) throw fail('This file is macro-enabled. Macro-enabled files are not supported.')
+    if (!types.includes(def.signature)) throw invalid()
+  } else {
+    if (text('mimetype').trim() !== def.signature) throw invalid()
+    if (def.family === 'odf' && /encryption-data/i.test(text('META-INF/manifest.xml'))) throw fail('This document is password-protected (encrypted). Encrypted files are not supported.')
+    if (def.family === 'epub') {
+      const protectedPaths = new Set([...text('META-INF/encryption.xml').matchAll(/URI="([^"]+)"/g)].map((m) => decodeURIComponent(m[1]!)))
+      if (files.some((f) => def.isMedia(f.name) && protectedPaths.has(f.name))) throw fail('This EPUB has DRM-protected images and cannot be processed.')
+    }
+  }
   return files
 }
 
-export const isMediaPart = (name: string, format: OfficeFormat) => name.startsWith(OFFICE[format].mediaDir)
+export const isMediaPart = (name: string, format: OfficeFormat) => OFFICE[format].isMedia(name)
 
 export function inspectOffice(bytes: Uint8Array, format: OfficeFormat, fileName: string): OfficeInfo {
   const files = readOfficePackage(bytes, format, fileName)

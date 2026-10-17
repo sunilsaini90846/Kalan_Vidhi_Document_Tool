@@ -4,6 +4,7 @@ import { FileDropzone } from '@/components/upload/FileDropzone'
 import { ToolPage, btn, btnGhost } from '@/components/common/ToolPage'
 import { useObjectUrls } from '@/hooks/useObjectUrls'
 import { downloadBlob } from '@/services/downloads/download'
+import { rulesFor } from '@/services/formats/registry'
 import { useWorker } from '@/hooks/useWorker'
 import { computeCells, imagesPerPage, pageCount, pageSize, MM_TO_PT, type FitMode, type Orientation, type PagePreset, type PageSettings } from '@/services/pdf-processing/layout'
 import { AppError, toUserMessage } from '@/types/errors'
@@ -13,7 +14,7 @@ type Rotation = 0 | 90 | 180 | 270
 interface Item { id: string; file: File; rotate: Rotation }
 type Result = { status: 'idle' } | { status: 'working'; done: number } | { status: 'failed'; message: string } | { status: 'done'; blob: Blob; url: string; pages: number }
 
-const RULES = { accept: ['jpeg', 'png', 'webp'] } as const
+const RULES = rulesFor('image-to-pdf')
 const field = 'rounded-md border border-slate-300 px-2 py-1.5'
 const QUALITY = { 'Smaller file (JPEG 75%)': 0.75, 'Balanced (JPEG 90%)': 0.9, 'Lossless (PNG, larger)': 1 } as const
 const RESIZE = { 'Original size': 0, 'Max 2480 px (≈A4 300 dpi)': 2480, 'Max 1754 px (≈A4 150 dpi)': 1754 } as const
@@ -35,6 +36,7 @@ export default function ImageToPdfPage() {
   const [quality, setQuality] = useState<number>(0.9)
   const [maxDim, setMaxDim] = useState<number>(0)
   const [filename, setFilename] = useState('images')
+  const [firstFrame, setFirstFrame] = useState(false)
   const [result, setResult] = useState<Result>({ status: 'idle' })
 
   const settings: PageSettings = {
@@ -58,7 +60,7 @@ export default function ImageToPdfPage() {
     try {
       const built = await client.run('imagesToPdf', {
         files: items.map((i) => i.file), rotations: items.map((i) => i.rotate), settings,
-        quality, maxDimension: maxDim || undefined, title: filename,
+        quality, maxDimension: maxDim || undefined, title: filename, allowFirstFrame: firstFrame,
       }, (p) => setResult({ status: 'working', done: p.done }))
       const blob = new Blob([built.bytes as BlobPart], { type: 'application/pdf' })
       setResult({ status: 'done', blob, url: urls.create(blob), pages: built.pageCount })
@@ -73,13 +75,13 @@ export default function ImageToPdfPage() {
   const busy = result.status === 'working'
 
   return (
-    <ToolPage title="Image to PDF" description="Combine JPG, PNG and WebP images into one PDF. Reorder, rotate, choose page size and layout. Everything runs in your browser."
+    <ToolPage title="Image to PDF" description="Combine JPG, PNG, WebP, GIF and BMP images into one PDF. Reorder, rotate, choose page size and layout. Everything runs in your browser."
       about={<>
         <p>Images are placed on pages in the order shown, one per page by default, or in a grid. “Fit” keeps the whole image visible; “Fill” crops the image to cover its area.</p>
         <p>Transparent areas become white. JPEG output is smaller; lossless PNG keeps exact pixels but makes bigger PDFs. Cropping a selected region is not available yet.</p>
         <p>Your images are not uploaded; the PDF is built on your device and checked (it is re-opened and its page count verified) before the download button appears.</p></>}>
       <div className="space-y-6">
-        <FileDropzone rules={RULES} existing={items.map((i) => i.file)} label={items.length ? 'Add more images' : 'Drop JPG, PNG or WebP images here'}
+        <FileDropzone rules={RULES} existing={items.map((i) => i.file)} label={items.length ? 'Add more images' : 'Drop images here'}
           onFiles={(f) => update((c) => [...c, ...f.map((v) => ({ id: `p${++n}`, file: v.file, rotate: 0 as Rotation }))])} />
 
         {items.length > 0 && (
@@ -126,6 +128,7 @@ export default function ImageToPdfPage() {
               {imagesPerPage(settings) > 1 && <label className="text-sm">Spacing (mm)<br /><input type="number" min={0} max={30} className={`${field} w-24`} value={spacingMm} onChange={(e) => { dropResult(); setSpacingMm(Math.max(0, Number(e.target.value))) }} /></label>}
               <label className="text-sm">Image quality<br /><select className={field} value={quality} onChange={(e) => { dropResult(); setQuality(Number(e.target.value)) }}>{Object.entries(QUALITY).map(([l, v]) => <option key={l} value={v}>{l}</option>)}</select></label>
               <label className="text-sm">Resize before embedding<br /><select className={field} value={maxDim} onChange={(e) => { dropResult(); setMaxDim(Number(e.target.value)) }}>{Object.entries(RESIZE).map(([l, v]) => <option key={l} value={v}>{l}</option>)}</select></label>
+              <label className="flex items-center gap-2 text-sm sm:col-span-2 lg:col-span-3"><input type="checkbox" checked={firstFrame} onChange={(e) => { dropResult(); setFirstFrame(e.target.checked) }} /> Use only the first frame of animated GIFs (otherwise animated files are refused)</label>
               <label className="text-sm">PDF filename<br /><input className={field} value={filename} onChange={(e) => setFilename(e.target.value)} /></label>
             </fieldset>
             {layoutError && <p role="alert" className="text-sm text-red-700">{layoutError}</p>}

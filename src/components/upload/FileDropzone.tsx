@@ -2,18 +2,23 @@ import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
 import { UploadCloud } from 'lucide-react'
 import { takePendingFiles } from '@/services/handoff'
 import { validateBatch, type ValidatedFile, type ValidationRules } from '@/services/file-validation/validate'
+import { acceptedLabels } from '@/services/formats/registry'
+import { LIMITS } from '@/utils/limits'
 
 interface Props {
   rules: ValidationRules
   existing?: File[]
   multiple?: boolean
   label?: string
+  /** Overrides the derived "Accepted formats" text (e.g. ".docx" for a ZIP-based format). */
+  formatsLabel?: string
   onFiles: (files: ValidatedFile[]) => void
 }
 
-/** Shared picker: drag-and-drop + browse, validation by signature, accessible error list. */
-export function FileDropzone({ rules, existing = [], multiple = true, label = 'Drop files here or browse', onFiles }: Props) {
+/** Shared picker: drag-and-drop + browse, validation by signature, accepted formats and limits shown up front. */
+export function FileDropzone({ rules, existing = [], multiple = true, label = 'Drop files here or browse', formatsLabel, onFiles }: Props) {
   const inputId = useId()
+  const hintId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -39,6 +44,7 @@ export function FileDropzone({ rules, existing = [], multiple = true, label = 'D
   }, [])
 
   const onDrop = (e: DragEvent) => { e.preventDefault(); setOver(false); void handle(e.dataTransfer.files) }
+  const formats = formatsLabel ?? (rules.accept === 'any' ? 'Any file type' : acceptedLabels(rules.accept))
 
   return (
     <div>
@@ -50,8 +56,10 @@ export function FileDropzone({ rules, existing = [], multiple = true, label = 'D
       >
         <UploadCloud aria-hidden className="mx-auto h-10 w-10 text-brand-600" />
         <p className="mt-2 font-medium">{busy ? 'Checking files…' : label}</p>
-        <p className="mt-1 text-sm text-slate-500">Files stay on your device; nothing is uploaded.</p>
-        <input ref={inputRef} id={inputId} type="file" multiple={multiple} className="sr-only" onChange={(e) => void handle(e.target.files)} />
+        <p id={hintId} className="mt-1 text-sm text-slate-600">
+          Accepted: <strong>{formats}</strong>. Up to {Math.round(LIMITS.maxFileBytes / 1048576)} MB per file{multiple ? `, ${LIMITS.maxFiles} files` : ''}. Files stay on your device; nothing is uploaded.
+        </p>
+        <input ref={inputRef} id={inputId} type="file" multiple={multiple} aria-describedby={hintId} className="sr-only" onChange={(e) => void handle(e.target.files)} />
         <label htmlFor={inputId} className="mt-4 inline-block cursor-pointer rounded-md bg-brand-600 px-4 py-2 text-white hover:bg-brand-700 focus-within:outline-2">
           Browse files
         </label>

@@ -57,5 +57,5 @@ describe('verifyPackage', () => {
     expect(() => verifyPackage(orig, z({ a: strToU8('1') }), new Set())).toThrow()
     expect(() => verifyPackage(orig, z({ b: strToU8('2'), a: strToU8('1') }), new Set())).toThrow()
   })
-  it('has format definitions for all formats', () => expect(Object.keys(OFFICE)).toEqual(['docx', 'pptx', 'xlsx']))
+  it('has format definitions for all formats', () => expect(Object.keys(OFFICE)).toEqual(['docx', 'pptx', 'xlsx', 'odt', 'ods', 'odp', 'epub']))
 })

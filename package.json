@@ -1,5 +1,5 @@
 {
-  "name": "document-compress",
+  "name": "kalan-vidhi-doc-tool",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -13,7 +13,8 @@
     "e2e": "playwright test",
     "audit": "npm audit --omit=dev",
     "verify:hosting": "node scripts/verify-hosting.mjs",
-    "test:all": "npm run typecheck && npm test && npm run e2e"
+    "test:all": "npm run typecheck && npm test && npm run e2e",
+    "docs:formats": "node scripts/gen-formats-doc.mjs"
   },
   "dependencies": {
     "browser-image-compression": "^2.0.2",

@@ -4,25 +4,31 @@ import { UploadCloud } from 'lucide-react'
 import { Seo } from '@/components/common/Seo'
 import { ToolCard } from '@/components/common/ToolCard'
 import { routeForFile } from '@/services/file-validation/route'
+import { detectKind, readHead } from '@/services/file-validation/signatures'
+import { explainUnsupported } from '@/services/formats/registry'
 import { setPendingFiles } from '@/services/handoff'
+import { BRAND } from '@/config/brand'
+import { FORMATS } from '@/services/formats/registry'
 import { TOOLS } from '@/tools/registry'
 
 const FAQ: [string, string][] = [
   ['Are my files uploaded to a server?', 'No. The tools on this site process your files inside your browser. There is no file upload endpoint, and files are not stored. The page itself is served as static files from Firebase Hosting.'],
   ['Do I need an account?', 'No. There is no sign-up or login.'],
   ['Will my file always get smaller?', 'Not always. Photos and scans often shrink a lot; text-only documents, already-optimized PDFs and Office files with small images may not. When nothing can be reduced we tell you and keep your original; we never show a made-up saving.'],
-  ['What happens to quality?', 'Compression presets re-encode images, which can reduce visual quality. Lower presets lose more. Always check the output before replacing an original.'],
-  ['Which file types are supported?', 'JPG, PNG and WebP images; PDF; DOCX, PPTX and XLSX (macro-free); and ZIP. Other formats are rejected with a clear message.'],
-  ['Why did my PDF or Office file get rejected?', 'Encrypted files, digitally signed PDFs and macro-enabled Office files are refused, because processing them could break or expose important features.'],
-  ['Is there a file size limit?', 'Yes. Limits protect your browser from running out of memory (by default 100 MB per file and 400 MB per batch). You will see a message if a file is too large.'],
+  ['What happens to quality?', 'Compression presets re-encode images, which can reduce visual quality. Lower presets lose more, and PNG colour reduction is lossy. Each result says what was done. Always check the output before replacing an original.'],
+  ['Which file types are supported?', 'See “Supported formats” above. Each tool lists exactly what it accepts before you choose a file, and says why when it cannot handle something.'],
+  ['Why was my animated GIF or WebP refused?', 'Converting would keep only the first frame and lose the animation. You can opt in to first-frame-only output, but we never do it silently.'],
+  ['Why did my PDF, Office or e-book file get rejected?', 'Encrypted and password-protected files, digitally signed PDFs, DRM-protected e-books and macro-enabled Office files are refused, because processing them could break or expose important features.'],
+  ['Is there a file size limit?', 'Yes. Limits protect your browser from running out of memory (by default 100 MB per file, 50 megapixels per image and 400 MB per batch). You will see a message if a file is too large.'],
 ]
 
-const FORMATS: [string, string][] = [
-  ['Images', 'JPG, PNG, WebP: compress, resize, convert, combine into PDF'],
-  ['PDF', 'Merge, split, extract/delete/reorder pages, rotate, compress (JPEG images)'],
-  ['Office', 'DOCX, PPTX, XLSX: inspect and optimize embedded images'],
-  ['Archives', 'ZIP: inspect, extract single files, create'],
+const GROUPS: [string, string, string][] = [
+  ['image', 'Images', 'Compress, resize, convert, or combine into a PDF. Several formats are input-only (converted, not compressed).'],
+  ['document', 'Documents', 'PDF: merge, split, extract, rotate, recompress JPEG images. Office, OpenDocument and EPUB: optimize embedded images.'],
+  ['archive', 'Archives', 'Inspect and safely extract single files; create ZIP.'],
 ]
+
+const sniff = async (f: File) => detectKind(await readHead(f))
 
 function HeroUpload() {
   const id = useId()
@@ -34,7 +40,7 @@ function HeroUpload() {
     if (!list?.length) return
     const files = [...list]
     const route = await routeForFile(files[0]!)
-    if (!route) { setMessage('That file type is not supported. Try a JPG, PNG, WebP, PDF, DOCX, PPTX, XLSX or ZIP file.'); return }
+    if (!route) { setMessage(explainUnsupported(await sniff(files[0]!), files[0]!.name) ?? 'That file type is not supported. See “Supported formats” below for what can be opened.'); return }
     setMessage(null)
     setPendingFiles(route === '/image-compressor' ? files : files.slice(0, 1))
     navigate(route)
@@ -56,9 +62,10 @@ export default function HomePage() {
   const popular = TOOLS.filter((t) => t.popular)
   return (
     <>
-      <Seo title="Free file compression and conversion" description="Free, private tools to compress and convert images, PDFs and Office files. Supported tools run in your browser with no sign-up." />
+      <Seo title="Free file compression and conversion" description={BRAND.description} />
       <section className="mx-auto max-w-6xl px-4 py-14 text-center">
-        <h1 className="text-4xl font-bold tracking-tight md:text-5xl">Free file compression and conversion</h1>
+        <p className="text-sm font-semibold uppercase tracking-widest text-brand-700">{BRAND.name}</p>
+        <h1 className="mt-2 text-4xl font-bold tracking-tight md:text-5xl">Free file compression and conversion</h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">Compress images and PDFs, merge and split documents, and optimize Office files. No account needed, and the tools on this site process your files locally in your browser instead of uploading them.</p>
         <HeroUpload />
         <p className="mt-4 text-sm text-slate-600">Or <Link to="/tools" className="text-brand-700 underline">browse all tools</Link>.</p>
@@ -95,9 +102,17 @@ export default function HomePage() {
       <section aria-labelledby="formats" className="bg-white py-14">
         <div className="mx-auto max-w-6xl px-4">
           <h2 id="formats" className="text-2xl font-semibold">Supported formats</h2>
+          <p className="mt-2 text-sm text-slate-600">Support is per tool: a format listed here is not necessarily accepted by every tool. Open a tool to see what it takes and what it does with each format.</p>
           <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-            {FORMATS.map(([k, v]) => <div key={k} className="rounded-xl border border-slate-200 p-4"><dt className="font-semibold">{k}</dt><dd className="mt-1 text-sm text-slate-600">{v}</dd></div>)}
+            {GROUPS.map(([key, title, what]) => (
+              <div key={key} className="rounded-xl border border-slate-200 p-4">
+                <dt className="font-semibold">{title}</dt>
+                <dd className="mt-1 text-sm text-slate-700">{FORMATS.filter((f) => f.group === key && f.level === 'supported' && f.id !== 'apng').map((f) => f.label).join(', ')}</dd>
+                <dd className="mt-1 text-sm text-slate-600">{what}</dd>
+              </div>
+            ))}
           </dl>
+          <p className="mt-4 text-sm text-slate-600">Not supported yet: {FORMATS.filter((f) => f.level !== 'supported').map((f) => f.label).join(', ')}.</p>
         </div>
       </section>
 

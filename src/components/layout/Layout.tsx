@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Menu, Search, ShieldCheck, X } from 'lucide-react'
+import { Menu, Search, X } from 'lucide-react'
+import { BRAND } from '@/config/brand'
 import { ErrorBoundary } from '@/components/feedback/ErrorBoundary'
 
 const nav = [
@@ -31,7 +32,7 @@ export function Layout() {
       <a href="#main" className="sr-only focus:not-sr-only focus:p-2">Skip to content</a>
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link to="/" className="flex items-center gap-2 text-lg font-bold"><ShieldCheck aria-hidden className="h-6 w-6 text-brand-600" />FileSqueeze</Link>
+          <Link to="/" aria-label={`${BRAND.name} home`} className="flex items-center gap-2"><img src="/favicon.svg" alt="" width={32} height={32} className="h-8 w-8" /><span className="leading-tight"><span className="block text-base font-bold text-slate-900">{BRAND.parent}</span><span className="block text-xs font-semibold tracking-wide text-brand-700">{BRAND.product}</span></span></Link>
           <nav aria-label="Main" className="hidden items-center gap-5 md:flex">
             {nav.map((n) => <NavLink key={n.to} to={n.to} className={linkCls}>{n.label}</NavLink>)}
             <SearchBox />
@@ -50,7 +51,7 @@ export function Layout() {
       <main id="main" className="flex-1"><ErrorBoundary><Outlet /></ErrorBoundary></main>
       <footer className="border-t border-slate-200 bg-white py-6 text-sm text-slate-600">
         <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-3 px-4">
-          <span>© FileSqueeze. Supported tools process files locally in your browser.</span>
+          <span>© {new Date().getFullYear()} {BRAND.parent} · {BRAND.product}. Supported tools process files locally in your browser.</span>
           <nav aria-label="Footer" className="flex gap-4"><Link to="/tools">All tools</Link><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/about">About</Link><Link to="/contact">Contact</Link></nav>
         </div>
       </footer>

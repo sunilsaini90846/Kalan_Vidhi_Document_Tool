@@ -1,28 +1,35 @@
 import { useCallback, useRef, useState } from 'react'
 import { useWorker } from '@/hooks/useWorker'
+import { detectKind, readHead } from '@/services/file-validation/signatures'
+import type { ImageJobResult, ImageMode } from '@/services/image-processing/job'
 import type { OutputMime } from '@/services/image-processing/process'
+import { rasterizeSvg } from '@/services/image-processing/svg'
 import { AppError, toUserMessage } from '@/types/errors'
 
 export type ItemState =
   | { status: 'queued' }
   | { status: 'processing' }
-  | { status: 'done'; blob: Blob; name: string; width: number; height: number; keptOriginal: boolean }
+  | { status: 'done'; blob: Blob; result: ImageJobResult; keptOriginal: boolean }
   | { status: 'failed'; message: string }
 
 export interface BatchItem { id: string; file: File; state: ItemState }
 export interface BatchConfig {
-  mime: OutputMime | 'same'
+  mode: ImageMode
+  output: OutputMime | 'same'
   quality: number
   maxWidth?: number
   maxHeight?: number
   allowEnlarge: boolean
   suffix: string
-  /** Keep the original when re-encoding does not make it smaller (compression only). */
-  keepIfLarger: boolean
+  allowFirstFrame: boolean
 }
 
 let counter = 0
 
+/**
+ * Processes one file at a time (bounded concurrency of 1): a batch never holds more than one decoded image in
+ * memory. SVGs are rasterized on the main thread first because workers cannot load SVG images.
+ */
 export function useImageBatch() {
   const client = useWorker()
   const [items, setItems] = useState<BatchItem[]>([])
@@ -44,10 +51,15 @@ export function useImageBatch() {
       if (cancelled.current) { patch(item.id, { status: 'queued' }); continue }
       patch(item.id, { status: 'processing' })
       try {
-        const r = await client.run('processImage', { file: item.file, ...cfg })
-        patch(item.id, r.keptOriginal
-          ? { status: 'done', blob: item.file, name: r.name, width: r.width, height: r.height, keptOriginal: true }
-          : { status: 'done', blob: r.blob, name: r.name, width: r.width, height: r.height, keptOriginal: false })
+        let input = item.file
+        const notes: string[] = []
+        if (detectKind(await readHead(input)) === 'svg') {
+          input = await rasterizeSvg(input, { maxWidth: cfg.maxWidth, maxHeight: cfg.maxHeight })
+          notes.push('SVG was rasterized (vector detail is not kept in PNG/WebP/JPG).')
+        }
+        const r = await client.run('processImage', { file: input, ...cfg, allowEnlarge: cfg.allowEnlarge || input !== item.file })
+        const result = { ...r, notes: [...notes, ...r.notes] }
+        patch(item.id, { status: 'done', blob: r.keptOriginal ? item.file : r.blob!, result, keptOriginal: r.keptOriginal })
       } catch (e) {
         if (e instanceof AppError && e.code === 'CANCELLED') patch(item.id, { status: 'queued' })
         else patch(item.id, { status: 'failed', message: toUserMessage(e) })
@@ -56,5 +68,6 @@ export function useImageBatch() {
     setRunning(false)
   }, [items, client])
 
-  return { items, running, add, remove, clear, cancel, run }
+  const capabilities = useCallback(() => client.run('capabilities', undefined), [client])
+  return { items, running, add, remove, clear, cancel, run, capabilities }
 }

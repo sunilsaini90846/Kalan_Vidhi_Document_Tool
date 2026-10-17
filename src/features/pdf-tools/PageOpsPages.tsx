@@ -27,7 +27,7 @@ function PageOp({ title, description, about, action, options, run }: {
   async function go() {
     if (!sel.pdf) return
     setBusy(true); setError(null); setRes(null)
-    try { setRes(await run({ client, bytes: sel.pdf.bytes.slice(), name: baseName(sel.pdf.file.name), pages: sel.pdf.info.pages })) }
+    try { setRes(await run({ client, bytes: sel.pdf.bytes, name: baseName(sel.pdf.file.name), pages: sel.pdf.info.pages })) }
     catch (e) { if (!(e instanceof AppError && e.code === 'CANCELLED')) setError(toUserMessage(e)) } finally { setBusy(false) }
   }
   const reset = () => { setRes(null); setError(null); sel.clear() }

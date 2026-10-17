@@ -1,3 +1,4 @@
+import { BRAND } from '@/config/brand'
 import { EncryptedPDFError, PDFDict, PDFDocument, PDFName, PDFNumber, degrees } from 'pdf-lib'
 import { AppError } from '@/types/errors'
 
@@ -13,7 +14,8 @@ export async function loadPdf(bytes: Uint8Array, name = 'This file'): Promise<PD
   try {
     return await PDFDocument.load(bytes, { updateMetadata: false })
   } catch (e) {
-    if (e instanceof EncryptedPDFError) throw new AppError('PROCESSING_FAILED', `${name} is password-protected or encrypted. Remove the protection first; encrypted PDFs are not supported.`)
+    // pdf-lib can throw its encryption error from a different copy of the class, so instanceof alone is not reliable.
+    if (e instanceof EncryptedPDFError || (e instanceof Error && /\bencrypted\b/i.test(e.message))) throw new AppError('PROCESSING_FAILED', `${name} is password-protected or encrypted. Remove the protection first; encrypted PDFs are not supported.`)
     throw new AppError('PROCESSING_FAILED', `${name} could not be read as a valid PDF; it may be damaged.`)
   }
 }
@@ -53,7 +55,7 @@ export async function mergePdfs(sources: { name: string; bytes: Uint8Array }[]):
     copied.forEach((p) => out.addPage(p))
     total += copied.length
   }
-  out.setProducer('FileSqueeze')
+  out.setProducer(BRAND.producer)
   return { bytes: await verify(await out.save(), total), pages: total }
 }
 
@@ -64,7 +66,7 @@ export async function extractPages(bytes: Uint8Array, pages: number[]): Promise<
   const out = await PDFDocument.create()
   const copied = await out.copyPages(src, pages.map((p) => p - 1))
   copied.forEach((p) => out.addPage(p))
-  out.setProducer('FileSqueeze')
+  out.setProducer(BRAND.producer)
   return verify(await out.save(), pages.length)
 }
 
@@ -93,7 +95,7 @@ export async function splitPdf(bytes: Uint8Array, groups: number[][]): Promise<U
   for (const g of groups) {
     const out = await PDFDocument.create()
     ;(await out.copyPages(src, g.map((p) => p - 1))).forEach((p) => out.addPage(p))
-    out.setProducer('FileSqueeze')
+    out.setProducer(BRAND.producer)
     outs.push(await verify(await out.save(), g.length))
   }
   return outs

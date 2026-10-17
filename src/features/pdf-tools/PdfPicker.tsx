@@ -1,10 +1,11 @@
 import { FileDropzone } from '@/components/upload/FileDropzone'
+import { rulesFor } from '@/services/formats/registry'
 import { btnGhost } from '@/components/common/ToolPage'
 import { FORM_WARNING } from '@/services/pdf-processing/pdfOps'
 import { formatBytes } from '@/utils/limits'
 import type { usePdfFile } from './usePdfFile'
 
-const RULES = { accept: ['pdf'] } as const
+const RULES = rulesFor('split-pdf')
 
 export function PdfPicker({ sel, disabled }: { sel: ReturnType<typeof usePdfFile>; disabled?: boolean }) {
   if (sel.pdf) {

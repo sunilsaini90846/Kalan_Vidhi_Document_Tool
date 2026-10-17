@@ -1,4 +1,5 @@
-# FileSqueeze – privacy-first file compression/conversion (static React app)
+# Kalan Vidhi Doc Tool – privacy-first file compression/conversion (static React app)
+Brand: "Kalan Vidhi" is the parent brand, "Doc Tool" the product. Names live in `src/config/brand.ts` (never hard-code them).
 
 ## Stack
 React 19 + TypeScript (strict) + Vite 6 + React Router 7 + Tailwind 4. Tests: Vitest + RTL, Playwright for e2e.

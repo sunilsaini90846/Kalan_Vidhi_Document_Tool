@@ -24,7 +24,7 @@ export default function CompressPdfPage() {
   async function run() {
     if (!sel.pdf) return
     setBusy(true); setError(null); setReport(null); setProgress(null)
-    try { setReport(await client.run('compressPdf', { bytes: sel.pdf.bytes.slice(), preset }, setProgress)) }
+    try { setReport(await client.run('compressPdf', { bytes: sel.pdf.bytes, preset }, setProgress)) }
     catch (e) { if (!(e instanceof AppError && e.code === 'CANCELLED')) setError(toUserMessage(e)) }
     finally { setBusy(false) }
   }

@@ -1,3 +1,4 @@
+import { BRAND } from '@/config/brand'
 import { PDFArray, PDFBool, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFStream } from 'pdf-lib'
 import { PRESETS, type CompressPreset } from '@/services/image-processing/presets'
 import { loadBitmap, renderImage } from '@/services/image-processing/process'
@@ -88,7 +89,7 @@ export async function compressPdf(
   }
   onProgress?.(candidates.length, candidates.length)
 
-  doc.setProducer('FileSqueeze')
+  doc.setProducer(BRAND.producer)
   const pages = doc.getPageCount()
   const bytes = await doc.save({ useObjectStreams: true })
   const check = await PDFDocument.load(bytes)

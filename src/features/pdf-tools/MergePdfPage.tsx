@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ArrowDown, ArrowUp, Trash2, X } from 'lucide-react'
 import { FileDropzone } from '@/components/upload/FileDropzone'
 import { ToolPage, btn, btnGhost } from '@/components/common/ToolPage'
+import { rulesFor } from '@/services/formats/registry'
 import { useWorker } from '@/hooks/useWorker'
 import { toUserMessage } from '@/types/errors'
 import { formatBytes } from '@/utils/limits'
@@ -26,7 +27,7 @@ export default function MergePdfPage() {
   async function merge() {
     setBusy(true); setError(null)
     try {
-      const r = await client.run('mergePdfs', { sources: good.map((p) => ({ name: p.file.name, bytes: p.bytes.slice() })) })
+      const r = await client.run('mergePdfs', { sources: good.map((p) => ({ name: p.file.name, bytes: p.bytes })) })
       setOut({ outputs: [{ name: 'merged.pdf', blob: pdfBlob(r.bytes) }], pages: r.pages })
     } catch (e) { setError(toUserMessage(e)) } finally { setBusy(false) }
   }
@@ -37,7 +38,7 @@ export default function MergePdfPage() {
         <p>Add PDFs, arrange them with the arrows, then merge. The merged file is re-opened and its page count checked against the inputs.</p>
         <p>Encrypted PDFs and digitally signed PDFs are rejected (a merge would break a signature). Form fields may not stay interactive after merging, and you will see a warning when a PDF has them.</p></>}>
       <div className="space-y-5">
-        <FileDropzone rules={{ accept: ['pdf'] }} existing={files} label="Drop PDFs here" onFiles={async (f) => {
+        <FileDropzone rules={rulesFor('merge-pdf')} existing={files} label="Drop PDFs here" onFiles={async (f) => {
           reset()
           const loaded = await Promise.all(f.map((v) => loadPdfFile(v.file, client)))
           setEntries((c) => [...c, ...loaded.map((load) => ({ id: `m${++n}`, load }))])

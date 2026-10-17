@@ -1,3 +1,4 @@
+import { BRAND } from '@/config/brand'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { AppError } from '@/types/errors'
 import { computeCells, imagesPerPage, pageCount, pageSize, placeImage, type PageSettings } from './layout'
@@ -14,7 +15,7 @@ export async function buildPdf(images: PdfImage[], s: PageSettings, title?: stri
   const per = imagesPerPage(s)
   const doc = await PDFDocument.create()
   if (title) doc.setTitle(title)
-  doc.setProducer('FileSqueeze')
+  doc.setProducer(BRAND.producer)
 
   let page = doc.addPage([pw, ph])
   for (const [i, img] of images.entries()) {

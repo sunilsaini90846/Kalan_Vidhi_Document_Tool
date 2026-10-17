@@ -4,7 +4,7 @@ import { FileDropzone } from '@/components/upload/FileDropzone'
 import { ToolPage, btn, btnGhost } from '@/components/common/ToolPage'
 import { ARCHIVE_LIMITS } from '@/services/archive-processing/limits'
 import { useWorker } from '@/hooks/useWorker'
-import { listZipEntries, type ZipEntryInfo } from '@/services/archive-processing/zipDirectory'
+import type { ArchiveEntry, ArchiveKind } from '@/services/archive-processing/archive'
 import { downloadBlob } from '@/services/downloads/download'
 import { savedPercent } from '@/services/image-processing/sizing'
 import { AppError, toUserMessage } from '@/types/errors'
@@ -16,10 +16,10 @@ const CREATE_MAX_BYTES = 250 * 1024 * 1024
 
 export default function ZipToolsPage() {
   return (
-    <ToolPage title="ZIP Tools" description="Inspect a ZIP, extract single files safely, or create a ZIP. Everything runs in your browser."
+    <ToolPage title="ZIP Tools" description="Inspect ZIP, TAR and GZIP archives, extract single files safely, or create a ZIP. Everything runs in your browser."
       about={<>
         <p><strong>Safety:</strong> entry paths are checked and archives containing absolute paths or “..” segments are rejected. Nothing is ever opened or run; files are only offered as downloads. Extracted files keep just their file name, never folders. Be careful with files like .exe, .bat or .js.</p>
-        <p><strong>Limits:</strong> up to {ARCHIVE_LIMITS.maxEntries} entries, {formatBytes(ARCHIVE_LIMITS.maxTotalBytes)} when expanded, {formatBytes(ARCHIVE_LIMITS.maxEntryBytes)} per file. Password-protected and ZIP64 archives are not supported. Size limits are enforced while unpacking, not just from the archive’s own claims.</p>
+        <p><strong>Limits:</strong> up to {ARCHIVE_LIMITS.maxEntries} entries, {formatBytes(ARCHIVE_LIMITS.maxTotalBytes)} when expanded, {formatBytes(ARCHIVE_LIMITS.maxEntryBytes)} per file. Password-protected and ZIP64 archives are not supported. TAR and GZIP files can be inspected and extracted but not created; links inside TARs are listed and never extracted. 7Z and RAR are not supported. Size limits are enforced while unpacking, not just from the archive’s own claims.</p>
         <p>Photos, videos, PDFs and Office files are already compressed, so zipping them usually makes them no smaller.</p></>}>
       <div className="grid gap-10 lg:grid-cols-2">
         <OpenZip />
@@ -31,21 +31,22 @@ export default function ZipToolsPage() {
 
 function OpenZip() {
   const client = useWorker()
-  const [state, setState] = useState<{ file: File; bytes: Uint8Array; entries: ZipEntryInfo[] } | null>(null)
+  const [state, setState] = useState<{ file: File; bytes: Uint8Array; entries: ArchiveEntry[]; kind: ArchiveKind; note?: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function open(file: File) {
+  async function open(file: File, kind: ArchiveKind) {
     setError(null); setState(null)
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
-      setState({ file, bytes, entries: listZipEntries(bytes, ARCHIVE_LIMITS) })
+      const r = await client.run('listArchive', { bytes: bytes, kind, name: file.name })
+      setState({ file, bytes, kind, entries: r.entries, note: r.note })
     } catch (e) { setError(toUserMessage(e)) }
   }
   async function extract(name: string) {
     if (!state) return
     setError(null)
     try {
-      const data = await client.run('extractZipEntry', { bytes: state.bytes.slice(), name })
+      const data = await client.run('extractArchiveEntry', { bytes: state.bytes, kind: state.kind, entry: name, name: state.file.name })
       if (!data) throw new AppError('PROCESSING_FAILED', 'That file could not be extracted.')
       downloadBlob(new Blob([data as BlobPart]), name.split('/').pop() || 'file')
     } catch (e) { setError(toUserMessage(e)) }
@@ -56,12 +57,12 @@ function OpenZip() {
   return (
     <section aria-labelledby="open-zip" className="space-y-4">
       <h2 id="open-zip" className="text-xl font-semibold">Inspect and extract</h2>
-      {!state && <FileDropzone rules={{ accept: ['zip'] }} multiple={false} label="Drop a ZIP file here" onFiles={(f) => void open(f[0]!.file)} />}
+      {!state && <FileDropzone rules={{ accept: ['zip', 'gzip', 'tar'] }} formatsLabel="ZIP, TAR, GZIP (.gz, .tgz, .tar.gz)" multiple={false} label="Drop an archive here" onFiles={(f) => void open(f[0]!.file, f[0]!.kind as ArchiveKind)} />}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {state && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <p role="status">{state.file.name} · {formatBytes(state.file.size)} · {files.length} file{files.length === 1 ? '' : 's'} · {formatBytes(total)} expanded</p>
+            <p role="status">{state.file.name} · {formatBytes(state.file.size)} · {files.length} file{files.length === 1 ? '' : 's'} · {formatBytes(total)} expanded{state.note ? ` · ${state.note}` : ''}</p>
             <button className={btnGhost} onClick={() => { setState(null); setError(null) }}>Close</button>
           </div>
           <ul className="max-h-96 space-y-1 overflow-auto rounded-xl border border-slate-200 bg-white p-2 text-sm" aria-label="Archive contents">
@@ -70,9 +71,9 @@ function OpenZip() {
                 <span className="min-w-0">
                   <span className="block truncate">{e.name}</span>
                   <span className="text-xs text-slate-500">{formatBytes(e.size)} → {formatBytes(e.compressedSize)}{e.size > 0 ? ` (${savedPercent(e.size, e.compressedSize).toFixed(0)}% saved)` : ''}
-                    {e.encrypted && ' · encrypted'}{e.unsafePath && ' · unsafe path, blocked'}{RISKY.test(e.name) && ' · executable type: do not run unless you trust the source'}</span>
+                    {e.encrypted && ' · encrypted'}{e.unsafePath && ' · unsafe path, blocked'}{e.note && ` · ${e.note}`}{RISKY.test(e.name) && ' · executable type: do not run unless you trust the source'}</span>
                 </span>
-                <button className={btnGhost} disabled={e.encrypted || e.unsafePath} aria-label={`Extract ${e.name}`} onClick={() => void extract(e.name)}>Extract</button>
+                <button className={btnGhost} disabled={!e.extractable} aria-label={`Extract ${e.name}`} onClick={() => void extract(e.name)}>Extract</button>
               </li>
             ))}
           </ul>

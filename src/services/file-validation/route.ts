@@ -1,14 +1,17 @@
-import { detectKind, readHead } from './signatures'
+import { detectKind, readHead, type DetectedKind } from './signatures'
 
-const OFFICE = /\.(docx|pptx|xlsx)$/i
-
-/** Picks the most useful tool for a dropped file, by content (signature) and, for Office files, extension. */
-export function routeFor(kind: ReturnType<typeof detectKind>, fileName: string): string | null {
+/** Picks the most useful tool for a dropped file, by content (signature) and, for packages, extension. */
+export function routeFor(kind: DetectedKind, fileName: string): string | null {
   if (kind === 'jpeg' || kind === 'png' || kind === 'webp') return '/image-compressor'
+  if (kind === 'gif' || kind === 'bmp' || kind === 'tiff' || kind === 'avif' || kind === 'svg' || kind === 'ico') return '/image-converter'
   if (kind === 'pdf') return '/pdf-compressor'
+  if (kind === 'gzip' || kind === 'tar') return '/zip-tools'
   if (kind === 'zip') {
-    const m = OFFICE.exec(fileName)
-    return m ? `/${m[1]!.toLowerCase()}-optimizer` : '/zip-tools'
+    const ext = /\.([a-z0-9]+)$/i.exec(fileName)?.[1]?.toLowerCase()
+    if (ext === 'docx' || ext === 'pptx' || ext === 'xlsx') return `/${ext}-optimizer`
+    if (ext === 'odt' || ext === 'ods' || ext === 'odp') return '/odf-optimizer'
+    if (ext === 'epub') return '/epub-optimizer'
+    return '/zip-tools'
   }
   return null
 }

@@ -10,7 +10,7 @@ export type PdfLoad = { ok: true; pdf: LoadedPdf } | { ok: false; file: File; me
 export async function loadPdfFile(file: File, client: WorkerClient): Promise<PdfLoad> {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer())
-    const info = await client.run('inspectPdf', { bytes: bytes.slice(), name: file.name })
+    const info = await client.run('inspectPdf', { bytes: bytes, name: file.name })
     return { ok: true, pdf: { file, bytes, info } }
   } catch (e) {
     return { ok: false, file, message: toUserMessage(e) }

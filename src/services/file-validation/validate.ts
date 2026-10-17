@@ -5,6 +5,8 @@ import { detectKind, readHead, type DetectedKind } from './signatures'
 export interface ValidationRules {
   /** Detected kinds that are allowed, or 'any' to skip content-type checks (size/empty/duplicate checks still apply). */
   accept: readonly Exclude<DetectedKind, 'unknown'>[] | 'any'
+  /** Shown instead of the generic message for content we recognise but cannot handle here (see formats registry). */
+  explain?: (kind: DetectedKind, fileName: string) => string | null
   maxFileBytes?: number
 }
 
@@ -22,7 +24,8 @@ export async function validateFile(file: File, rules: ValidationRules): Promise<
   }
   const kind = detectKind(await readHead(file))
   if (rules.accept !== 'any' && (kind === 'unknown' || !rules.accept.includes(kind))) {
-    throw new AppError('UNSUPPORTED_TYPE', `"${file.name}" is not a supported file type (accepted: ${(rules.accept as readonly string[]).join(', ')}).`)
+    const why = rules.explain?.(kind, file.name)
+    throw new AppError('UNSUPPORTED_TYPE', why ?? `"${file.name}" is not a supported file type for this tool (accepted: ${(rules.accept as readonly string[]).join(', ')}).`)
   }
   return { file, kind }
 }

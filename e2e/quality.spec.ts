@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { addImages, addRawFile } from './helpers'
 
-const ROUTES = ['/', '/tools', '/image-compressor', '/image-resizer', '/image-converter', '/image-to-pdf', '/merge-pdf', '/split-pdf', '/rotate-pdf', '/extract-pdf-pages', '/pdf-compressor', '/docx-optimizer', '/pptx-optimizer', '/xlsx-optimizer', '/zip-tools', '/privacy', '/terms', '/about', '/contact', '/404']
+const ROUTES = ['/', '/tools', '/image-compressor', '/image-resizer', '/image-converter', '/image-to-pdf', '/merge-pdf', '/split-pdf', '/rotate-pdf', '/extract-pdf-pages', '/pdf-compressor', '/docx-optimizer', '/pptx-optimizer', '/xlsx-optimizer', '/zip-tools', '/odf-optimizer', '/epub-optimizer', '/privacy', '/terms', '/about', '/contact', '/404']
 
 test.describe('accessibility (axe, WCAG 2 A/AA)', () => {
   for (const path of ROUTES) {

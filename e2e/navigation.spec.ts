@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-for (const path of ['/', '/tools', '/image-compressor', '/image-resizer', '/image-converter', '/image-to-pdf', '/merge-pdf', '/split-pdf', '/rotate-pdf', '/extract-pdf-pages', '/pdf-compressor', '/docx-optimizer', '/pptx-optimizer', '/xlsx-optimizer', '/zip-tools', '/privacy']) {
+for (const path of ['/', '/tools', '/image-compressor', '/image-resizer', '/image-converter', '/image-to-pdf', '/merge-pdf', '/split-pdf', '/rotate-pdf', '/extract-pdf-pages', '/pdf-compressor', '/docx-optimizer', '/pptx-optimizer', '/xlsx-optimizer', '/zip-tools', '/odf-optimizer', '/epub-optimizer', '/privacy']) {
   test(`direct navigation to ${path} works`, async ({ page }) => {
     await page.goto(path)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()

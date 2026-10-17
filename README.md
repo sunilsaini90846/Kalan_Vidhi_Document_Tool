@@ -1,30 +1,46 @@
-# FileSqueeze
+# Kalan Vidhi Doc Tool
 
-Free, privacy-first file compression and conversion. Static React app: no backend, no database, no login. Supported tools process files locally in the browser.
+Free, privacy-first file compression and conversion from **Kalan Vidhi** (parent brand) – *Doc Tool* is the product. A static React app: no backend, no database, no login. The tools marked available process files locally in your browser.
 
-## Status
-- Phase 1 (foundation): done.
-- Phase 2 (image tools): Image Compressor, Resizer, Converter, Image to PDF.
-- Phase 3 (PDF tools): Merge, Split (every page or ranges, ZIP output), Extract/Delete/Reorder pages, Rotate, Compressor.
-- Phase 4 (Office and archive tools): DOCX / PPTX / XLSX optimizers (with file information and embedded-image listing) and ZIP Tools (inspect, extract single files, create).
-- All 13 planned tools are available. A tool not yet working would be marked `coming-soon` in `src/tools/registry.ts` and has no route.
+Live: https://document-operations.web.app (Firebase project `lazytodisciplinedapp`, Hosting site `document-operations`).
+The product name lives in one place, `src/config/brand.ts`.
 
-### Office and ZIP behaviour and limits
-Office files are ZIP packages. Only images under `word|ppt|xl/media/` are touched: JPEG (RGB/gray) re-encoded; PNG only downscaled by the Balanced/Strong presets; GIF/EMF/WMF/CMYK JPEG untouched. Filenames and formats never change, so relationships and content types stay valid. Every other part is rewritten byte-identically, and the output is re-read and checked part-by-part before download is offered. Macro-enabled (DOCM/XLSM/PPTM, or any package containing VBA) and encrypted files are rejected. No Office-to-PDF conversion.
-ZIP reading counts bytes actually inflated (headers can lie), enforcing 5000 entries / 150 MB per file / 300 MB total, and rejects absolute paths, drive letters and `..` segments, encrypted entries, ZIP64 and unsupported compression methods. Extraction offers single files as downloads using only the base file name; nothing is executed.
+## What it does
 
+| Area | Tools | Notes |
+|---|---|---|
+| Images | Compressor, Resizer, Converter, Image to PDF | JPG, PNG, WebP; GIF, BMP, TIFF, AVIF, ICO, SVG as inputs (convert/resize). See the matrix below. |
+| PDF | Merge, Split, Extract/Delete/Reorder, Rotate, Compressor | Compressor recompresses **JPEG images** only; it is not a full PDF optimizer. |
+| Documents | DOCX, PPTX, XLSX, ODT/ODS/ODP, EPUB optimizers | Re-encode embedded JPEGs; all other parts byte-identical (verified). |
+| Archives | ZIP Tools | Inspect/extract ZIP, TAR, GZIP (.gz/.tgz/.tar.gz); create ZIP. |
+
+### Format support
+Support is per tool and per operation. The verified matrix is **[docs/FORMATS.md](docs/FORMATS.md)** (generated from `src/services/formats/registry.ts`; a test fails if it drifts). Summary:
+
+- **Supported:** JPEG, PNG, WebP, GIF*, BMP, TIFF, AVIF*, ICO, SVG, APNG (refused unless first-frame opt-in), PDF, DOCX, PPTX, XLSX, ODT, ODS, ODP, EPUB, TXT (via ZIP Tools), ZIP, TAR, GZIP. (*Browser-dependent decode is feature-detected; AVIF and GIF are input-only, as no browser can write them.)
+- **Requires a specialized engine (not adopted):** HEIC/HEIF (libheif LGPL + HEVC patents), 7Z, RAR, MP4/MOV/WebM/MP3/WAV/FLAC (ffmpeg.wasm-class engines).
+- **Not planned:** RTF.
+
+### Image compression: how it really works
+The output format is decided from the file's **content** (signature), never its name or browser-reported type. Every result is re-opened and checked (real format, decodes, expected size, transparency kept) before a download is offered.
+- **JPEG / WebP:** canvas re-encode at the chosen quality. If the first try is not smaller than the original, at most two lower qualities are tried (≥30%); the quality used is shown. If nothing is smaller, the original is kept ("0% saved").
+- **PNG:** own encoder (fflate deflate level 9, adaptive filters). *High Quality* = lossless (pixel-identical, proven by decoding the output and comparing); *Balanced / Low Size* = palette reduction to 256 / 128 colours (lossy, no dithering, alpha kept), always labelled.
+- **Not preserved:** EXIF/GPS and ICC profiles are dropped; colours become sRGB. Animated GIF/APNG/WebP/AVIF are refused (never silently flattened) unless the user opts in to first-frame-only.
+- **Limits:** 100 MB per file, 50 megapixels per image (read from the header before decoding), 400 MB per batch. Images are processed one at a time.
+- **Root causes fixed** (details in docs/AUDIT.md): output format taken from `file.type`; animated images flattened silently; PNG quality ignored.
 
 ### PDF engine and its limits
-Built on `pdf-lib` (MIT). `pdf-lib` cannot compress by itself, and WebAssembly optimizers such as Ghostscript and MuPDF are AGPL-licensed, so they were not adopted. The compressor instead re-encodes **JPEG images** inside the PDF through the browser (RGB/Gray/ICC-based only) and rewrites the file with object streams; a replaced image is kept only when it is smaller. It does **not** reduce text, vectors, fonts, CMYK or non-JPEG images, and it reports "no reduction possible" (keeping your original) when that is the case.
-Encrypted PDFs are rejected with a clear message. Digitally signed PDFs are rejected (any rewrite would invalidate the signature). PDFs with form fields get a warning because copying pages (merge/split/extract) may not keep fields interactive; rotate and compress keep the original structure.
-Not included: PDF page preview thumbnails (would need pdf.js), and the standalone "delete" / "reorder" pages (covered by the Extract tool's Delete mode and typed page order).
+Built on `pdf-lib` (MIT). See docs/PDF-ENGINES.md for the engine/licence evaluation. The compressor re-encodes **JPEG images** inside the PDF (RGB/Gray/ICC only) and rewrites with object streams; a replacement is kept only when smaller. It does **not** reduce text, vectors, fonts, CMYK or non-JPEG images. Encrypted and digitally signed PDFs are refused (a rewrite would invalidate a signature). PDFs with form fields get a warning for merge/split/extract; rotate and compress keep the original structure.
 
-- Phase 5 (quality): all heavy work runs in a module Web Worker (`src/workers/`); Cancel terminates the worker. Homepage sections (hero upload that routes to the right tool, how it works, privacy, formats, FAQ), header search and category filters, per-page meta/Open Graph tags, optional canonical URLs and `sitemap.xml` (set `VITE_SITE_URL`), axe accessibility scans of every route, and an e2e run under the production CSP.
+### Package formats (Office / OpenDocument / EPUB / archives)
+Only images are touched (`word|ppt|xl/media/`, ODF `Pictures/`, any JPEG/PNG in an EPUB outside `META-INF/`). Names and formats never change; ODF/EPUB `mimetype` stays first and stored (checked). Macro-enabled files, VBA/Basic/Scripts, encrypted ODF, and DRM-protected EPUB images are refused.
+Archive reading counts bytes actually inflated (headers can lie): 5000 entries / 150 MB per file / 300 MB total; unsafe paths (absolute, drive letters, `..`), encrypted entries, ZIP64, TAR links/devices and truncated TAR/GZIP (CRC + length checked) are rejected or never extracted.
 
 ### Architecture notes
-- `src/workers/handlers.ts` lists every off-main-thread operation; `WorkerClient` (`client.ts`) sends them to `tasks.worker.ts`. `useWorker()` gives each tool page its own worker, terminated on unmount.
-- Image encoding uses `OffscreenCanvas` (works in workers) with a DOM-canvas fallback.
-- Object URLs are tracked and revoked by `useObjectUrls`; input bytes live only in component state and are released when a file is cleared.
+- `src/workers/handlers.ts` lists every off-main-thread operation; `WorkerClient` sends them to `tasks.worker.ts`; `useWorker()` gives each tool page its own worker, terminated on unmount (Cancel terminates the worker; crashes reject all pending jobs).
+- Image jobs are sequential (one decoded image in memory at a time); `ImageBitmap`s are closed in `finally`; object URLs are tracked and revoked (`useObjectUrls`).
+- The TIFF decoder (`utif2`, MIT) is a separate lazy chunk loaded only when a TIFF is opened. SVG is rasterized on the main thread (workers cannot load SVG images) after a strict safety check.
+- Format knowledge lives in `src/services/formats/registry.ts`; dropzone rules, error messages, the homepage "Supported formats" section and docs derive from it.
 
 ## Commands
 ```bash
@@ -37,6 +53,9 @@ npm run preview              # 5. serve the production build locally
 npx playwright install chromium   # once, for e2e
 npm run e2e                  # browser tests: desktop + mobile Chrome, axe accessibility scans
 npm run test:all             # typecheck + unit + e2e
+npm run docs:formats         # regenerate docs/FORMATS.md from the format registry
+node scripts/make-fixtures.mjs   # regenerate test fixtures (needs: npm i --no-save sharp)
+node scripts/make-icons.mjs      # regenerate PNG icons/social image (needs sharp)
 ```
 Node 20.17+ works; Vite 6 / Vitest 4.1 are pinned for that reason (Vite 7+ / Vitest 5 need Node ≥ 20.19 / 22).
 
@@ -80,7 +99,7 @@ npm run typecheck && npm test && npm audit
 npm run build
 npm run e2e                                           # against the local preview server
 # Verify the real Hosting rules locally (serves dist with firebase.json, no project needed):
-npx firebase-tools emulators:start --only hosting --project demo-filesqueeze   # port 5002 if 5000 is busy
+npx firebase-tools emulators:start --only hosting --project demo-kalan-vidhi-doc-tool   # port 5002 if 5000 is busy
 npm run verify:hosting -- http://127.0.0.1:5002       # every route, caching, security headers
 E2E_BASE_URL=http://127.0.0.1:5002 npm run e2e        # full browser suite under the real CSP
 firebase deploy --only hosting

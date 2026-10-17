@@ -1,4 +1,5 @@
-import { loadBitmap, renderImage } from '@/services/image-processing/process'
+import { decodeImage } from '@/services/image-processing/decode'
+import { renderImage } from '@/services/image-processing/process'
 import { cellAspect, type PageSettings } from '@/services/pdf-processing/layout'
 import type { PdfImage } from '@/services/pdf-processing/imagesToPdf'
 
@@ -6,17 +7,18 @@ export interface PrepareOptions {
   rotate: 0 | 90 | 180 | 270
   quality: number // 1 = lossless PNG, otherwise JPEG quality
   maxDimension?: number // px, longest side
+  allowFirstFrame?: boolean
 }
 
 /**
- * Decode (EXIF-aware), rotate, optionally crop to the cell (fill mode) and resize,
+ * Decode (format-checked, EXIF-aware, animation-checked), rotate, optionally crop to the cell (fill mode) and resize,
  * flatten transparency onto white, then encode for embedding.
  */
 export async function prepareImage(file: File, page: PageSettings, o: PrepareOptions): Promise<PdfImage> {
-  const bmp = await loadBitmap(file)
+  const { bitmap } = await decodeImage(file, { allowFirstFrame: o.allowFirstFrame })
   try {
     const lossless = o.quality >= 1
-    const out = await renderImage(bmp, {
+    const out = await renderImage(bitmap, {
       mime: lossless ? 'image/png' : 'image/jpeg',
       quality: o.quality,
       rotate: o.rotate,
@@ -26,5 +28,5 @@ export async function prepareImage(file: File, page: PageSettings, o: PrepareOpt
       cropAspect: page.fit === 'fill' ? cellAspect(page) : undefined,
     })
     return { bytes: new Uint8Array(await out.blob.arrayBuffer()), kind: lossless ? 'png' : 'jpeg' }
-  } finally { bmp.close() }
+  } finally { bitmap.close() }
 }

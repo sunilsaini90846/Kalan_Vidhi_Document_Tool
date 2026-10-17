@@ -10,6 +10,8 @@ export const LIMITS = {
   maxFiles: envNum(import.meta.env.VITE_MAX_FILES, 50),
   /** Total input bytes across a batch, a guard for low-memory mobile browsers. */
   maxTotalBytes: mb(400),
+  /** Decoded-pixel cap per image (RGBA is 4 bytes/pixel; 50 MP ≈ 200 MB). */
+  maxPixels: 50_000_000,
 } as const
 
 export function formatBytes(bytes: number): string {

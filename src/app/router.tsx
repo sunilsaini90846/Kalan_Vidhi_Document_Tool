@@ -28,6 +28,9 @@ const DocxOptimizerPage = named('DocxOptimizerPage', () => import('@/features/of
 const PptxOptimizerPage = named('PptxOptimizerPage', () => import('@/features/office-optimizer/OfficeOptimizerPage'))
 const XlsxOptimizerPage = named('XlsxOptimizerPage', () => import('@/features/office-optimizer/OfficeOptimizerPage'))
 
+const OdfOptimizerPage = named('OdfOptimizerPage', () => import('@/features/office-optimizer/OfficeOptimizerPage'))
+const EpubOptimizerPage = named('EpubOptimizerPage', () => import('@/features/office-optimizer/OfficeOptimizerPage'))
+
 const wrap = (el: React.ReactNode) => <Suspense fallback={<p className="p-8 text-center">Loading…</p>}>{el}</Suspense>
 
 /** Add a route here only when its tool is functional (and mark it 'available' in tools/registry.ts). */
@@ -49,6 +52,8 @@ export const routes: RouteObject[] = [
       { path: 'docx-optimizer', element: wrap(<DocxOptimizerPage />) },
       { path: 'pptx-optimizer', element: wrap(<PptxOptimizerPage />) },
       { path: 'xlsx-optimizer', element: wrap(<XlsxOptimizerPage />) },
+      { path: 'odf-optimizer', element: wrap(<OdfOptimizerPage />) },
+      { path: 'epub-optimizer', element: wrap(<EpubOptimizerPage />) },
       { path: 'zip-tools', element: wrap(<ZipToolsPage />) },
       { path: 'privacy', element: wrap(<PrivacyPage />) },
       { path: 'terms', element: wrap(<TermsPage />) },
