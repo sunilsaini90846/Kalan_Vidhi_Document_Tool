@@ -3,6 +3,7 @@ import { PDFArray, PDFBool, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStre
 import { PRESETS, type CompressPreset } from '@/services/image-processing/presets'
 import { loadBitmap, renderImage } from '@/services/image-processing/process'
 import { loadPdf, assertEditable, describePdf } from './pdfOps'
+import { unwrapFilters } from './pdfEncodings'
 import { AppError } from '@/types/errors'
 
 export type { CompressPreset }
@@ -25,10 +26,29 @@ export interface CompressReport {
 
 const N = (s: string) => PDFName.of(s)
 
-function jpegFilter(d: PDFDict): boolean {
-  let f = d.lookup(N('Filter'))
-  if (f instanceof PDFArray && f.size() === 1) f = f.lookup(0)
-  return f === N('DCTDecode')
+const WRAPPERS = new Set(['ASCII85Decode', 'ASCIIHexDecode', 'FlateDecode'])
+
+/**
+ * Filter chain as names, e.g. ['ASCII85Decode', 'DCTDecode'] (how reportlab and others embed JPEGs).
+ * Eligible only when it ends in DCTDecode and every earlier filter is a plain byte wrapper with no DecodeParms.
+ */
+function jpegChain(d: PDFDict): string[] | null {
+  const f = d.lookup(N('Filter'))
+  const raw = f instanceof PDFArray ? Array.from({ length: f.size() }, (_, i) => f.lookup(i)) : [f]
+  const names = raw.map((x) => (x instanceof PDFName ? x.decodeText() : ''))
+  if (names.length === 0 || names[names.length - 1] !== 'DCTDecode') return null
+  if (!names.slice(0, -1).every((n) => WRAPPERS.has(n))) return null
+  const parms = d.lookup(N('DecodeParms'))
+  const hasParms = parms instanceof PDFArray ? Array.from({ length: parms.size() }, (_, i) => parms.lookup(i)).some((p) => p instanceof PDFDict) : parms instanceof PDFDict
+  return hasParms ? null : names.slice(0, -1)
+}
+
+/** The raw JPEG bytes of an eligible image stream (undoing any byte-wrapping filters), or null. */
+function jpegBytes(stream: PDFRawStream): Uint8Array | null {
+  const wrappers = jpegChain(stream.dict)
+  if (!wrappers) return null
+  const bytes = wrappers.length ? unwrapFilters(wrappers, stream.contents) : stream.contents
+  return bytes && bytes[0] === 0xff && bytes[1] === 0xd8 ? bytes : null
 }
 
 function colorOk(d: PDFDict): boolean {
@@ -43,7 +63,7 @@ function colorOk(d: PDFDict): boolean {
 }
 
 function eligible(d: PDFDict): boolean {
-  if (d.lookup(N('Subtype')) !== N('Image') || !jpegFilter(d) || !colorOk(d)) return false
+  if (d.lookup(N('Subtype')) !== N('Image') || !jpegChain(d) || !colorOk(d)) return false
   if (d.has(N('Decode')) || d.has(N('Mask'))) return false
   const stencil = d.lookup(N('ImageMask'))
   return !(stencil instanceof PDFBool && stencil.asBoolean())
@@ -68,12 +88,15 @@ export async function compressPdf(
     onProgress?.(i, candidates.length)
     const stream = obj as PDFRawStream
     try {
-      const original = stream.contents
+      const original = jpegBytes(stream)
+      if (!original) continue // wrapped data that does not decode to a JPEG: leave it alone
+      const wrapped = stream.contents.length
       // PDF viewers ignore EXIF orientation, so do not bake it in.
       const bmp = await loadBitmap(new Blob([original as BlobPart], { type: 'image/jpeg' }), false)
       let out
       try { out = await renderImage(bmp, { mime: 'image/jpeg', quality, maxWidth: maxDimension, maxHeight: maxDimension, flatten: true }) } finally { bmp.close() }
-      if (out.blob.size >= original.length * 0.95) continue
+      // Compare with what the PDF actually stores (the wrapped size), so ASCII85 bloat counts as a saving too.
+      if (out.blob.size >= wrapped * 0.95) continue
       const bytes = new Uint8Array(await out.blob.arrayBuffer())
       const d = stream.dict
       d.set(N('Width'), PDFNumber.of(out.width))
@@ -97,6 +120,7 @@ export async function compressPdf(
   return {
     bytes, originalSize: input.length, pages,
     imagesFound: images.length, imagesRecompressed: recompressed, imagesSkipped: images.length - recompressed,
-    noGain: bytes.length >= input.length,
+    // Under 1% is within noise of re-serialization, not a real reduction: report it as none rather than as a success.
+    noGain: bytes.length > input.length * 0.99,
   }
 }

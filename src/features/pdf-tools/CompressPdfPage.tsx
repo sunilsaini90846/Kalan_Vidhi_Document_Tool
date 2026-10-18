@@ -57,7 +57,7 @@ export default function CompressPdfPage() {
               <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-sm" role="status">
                 <p>Images found: {report.imagesFound} · recompressed: {report.imagesRecompressed} · left unchanged: {report.imagesSkipped}</p>
                 {report.noGain ? (
-                  <p className="font-medium text-amber-700">No size reduction was possible with this setting ({formatBytes(report.originalSize)} → {formatBytes(report.bytes.length)}). The file is likely already optimized or has no JPEG images, so keep your original.</p>
+                  <p className="font-medium text-amber-700">No size reduction was possible with this setting ({formatBytes(report.originalSize)} → {formatBytes(report.bytes.length)}). {report.imagesFound > 0 && report.imagesRecompressed === 0 ? ' Images were found, but none could be made smaller (unsupported encoding, or already small).' : ' The file is likely already optimized or has no JPEG images.'} Keep your original.</p>
                 ) : (
                   <>
                     <p className="font-medium text-green-700">Verified {report.pages}-page result: {formatBytes(report.originalSize)} → {formatBytes(report.bytes.length)} ({savedPercent(report.originalSize, report.bytes.length).toFixed(1)}% smaller)</p>

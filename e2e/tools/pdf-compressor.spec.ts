@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { PDFDocument } from 'pdf-lib'
 import { decodeInBrowser } from '../helpers'
+import { fixtureBytes } from '../helpers'
 import { dl, embeddedJpegs, encryptedPdf, manyPhotosPdf, photoPdf, signedPdf, textPdf, upload } from '../tool-kit'
 
 const compress = (page: import('@playwright/test').Page) => page.getByRole('button', { name: 'Compress PDF' }).click()
@@ -99,5 +100,38 @@ test.describe('PDF Compressor (JPEG image recompression)', () => {
     await expect(page.getByRole('alert')).toHaveCount(0) // cancelling is not an error
     await compress(page) // and the tool works again
     await expect(page.getByText(/Images found: 24/)).toBeVisible({ timeout: 60_000 })
+  })
+
+  test('a PDF from another producer (reportlab: JPEG wrapped in ASCII85) is recompressed, text intact', async ({ page }) => {
+    await page.goto('/pdf-compressor')
+    const src = fixtureBytes('reportlab-jpeg.pdf') // genuine third-party file: Filter [/ASCII85Decode /DCTDecode]
+    await upload(page, 'reportlab.pdf', src)
+    await preset(page, /Strong/); await compress(page)
+    await expect(page.getByText('recompressed: 1')).toBeVisible()
+    const out = await dl(page, /Download compressed PDF/)
+    expect(out.bytes.length).toBeLessThan(src.length * 0.3) // 95 KB of ASCII85 text becomes a small binary JPEG
+    const doc = await PDFDocument.load(out.bytes)
+    expect(doc.getPageCount()).toBe(1)
+    const [img] = await embeddedJpegs(out.bytes)
+    expect(await decodeInBrowser(page, img!)).toMatchObject({ width: 400, height: 300 })
+    // the page's drawing/text instructions must be byte-for-byte what the producer wrote
+    const content = async (b: Uint8Array) => {
+      const d = await PDFDocument.load(b); const c = d.getPage(0).node.Contents()
+      return Buffer.from((c as unknown as { contents: Uint8Array }).contents)
+    }
+    expect((await content(out.bytes)).equals(await content(src))).toBe(true)
+  })
+
+  test('images that cannot be recompressed are reported as no reduction: no "0.0% smaller", no download', async ({ page }) => {
+    await page.goto('/pdf-compressor')
+    const d = await PDFDocument.create()
+    const png = await d.embedPng(fixtureBytes('photo.png')) // Flate-compressed pixels: not a JPEG
+    d.addPage([595, 842]).drawImage(png, { x: 0, y: 0, width: 400, height: 300 })
+    await upload(page, 'png-only.pdf', Buffer.from(await d.save()))
+    await compress(page)
+    await expect(page.getByText(/No size reduction was possible/)).toBeVisible()
+    await expect(page.getByText('Images were found, but none could be made smaller')).toBeVisible()
+    await expect(page.getByText(/0\.0% smaller/)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Download compressed PDF/ })).toHaveCount(0)
   })
 })
