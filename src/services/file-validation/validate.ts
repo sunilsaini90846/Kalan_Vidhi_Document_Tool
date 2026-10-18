@@ -1,4 +1,5 @@
 import { AppError } from '@/types/errors'
+import { acceptedLabels } from '@/services/formats/registry'
 import { LIMITS, formatBytes } from '@/utils/limits'
 import { detectKind, readHead, type DetectedKind } from './signatures'
 
@@ -25,7 +26,7 @@ export async function validateFile(file: File, rules: ValidationRules): Promise<
   const kind = detectKind(await readHead(file))
   if (rules.accept !== 'any' && (kind === 'unknown' || !rules.accept.includes(kind))) {
     const why = rules.explain?.(kind, file.name)
-    throw new AppError('UNSUPPORTED_TYPE', why ?? `"${file.name}" is not a supported file type for this tool (accepted: ${(rules.accept as readonly string[]).join(', ')}).`)
+    throw new AppError('UNSUPPORTED_TYPE', why ?? `"${file.name}" is not a supported file type for this tool (accepted: ${acceptedLabels(rules.accept as readonly DetectedKind[])}).`)
   }
   return { file, kind }
 }

@@ -109,6 +109,7 @@ export const TOOL_ACCEPTS = {
   'image-resizer': ['jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff', 'avif', 'svg', 'ico'],
   'image-converter': ['jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff', 'avif', 'svg', 'ico'],
   'image-to-pdf': ['jpeg', 'png', 'webp', 'gif', 'bmp'],
+  'zip-tools': ['zip', 'gzip', 'tar'],
   'pdf-compressor': ['pdf'],
   'merge-pdf': ['pdf'],
   'split-pdf': ['pdf'],

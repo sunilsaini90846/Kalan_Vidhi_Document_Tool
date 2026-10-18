@@ -18,7 +18,7 @@ Release verification (Firebase emulator + e2e under real headers) is in README â
 - Keep UI, processing services, workers, validation and downloads separate; share validation/download/progress logic.
 - Lazy-load every tool route and its processing libs.
 - Heavy processing goes through `src/workers/handlers.ts` + `WorkerClient`, never the main thread. Add new operations there.
-- Add an e2e test (real files, read the downloaded output back) for every tool; e2e/quality.spec.ts also runs axe on every route, so new routes must be added to its list.
+- Every tool has its own spec, `e2e/tools/<slug>.spec.ts` (enforced by `src/tests/tool-coverage.test.ts`); shared builders are in `e2e/tool-kit.ts`, fixtures in `fixtures/`. Tests use real files and read the downloaded output back; e2e/quality.spec.ts also runs axe on every route, so new routes must be added to its list.
 - Don't commit `.firebaserc` or `.env`. Keep the `/assets/**` header rule last in firebase.json (later rules win) and run `verify:hosting` after any header change.
 
 ## Layout

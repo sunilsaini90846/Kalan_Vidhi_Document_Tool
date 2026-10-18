@@ -84,7 +84,7 @@ export function OfficeOptimizerPage({ formats }: { formats: readonly OfficeForma
               {media.length > 0 && (
                 <details className="mt-2"><summary className="cursor-pointer">Show images</summary>
                   <ul className="mt-2 max-h-56 space-y-1 overflow-auto">
-                    {media.slice(0, 200).map((m) => <li key={m.name} className="flex justify-between gap-3"><span className="truncate">{m.name}</span><span className="shrink-0 text-slate-600">{m.ext.toUpperCase()} · {formatBytes(m.size)}{m.note ? ` · ${m.note}` : ''}</span></li>)}
+                    {media.slice(0, 200).map((m) => <li key={m.name} className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-3"><span className="min-w-0 break-all">{m.name}</span><span className="text-slate-600 sm:shrink-0">{m.ext.toUpperCase()} · {formatBytes(m.size)}{m.note ? ` · ${m.note}` : ''}</span></li>)}
                   </ul>
                   {media.length > 200 && <p className="text-xs text-slate-600">…and {media.length - 200} more.</p>}
                 </details>)}

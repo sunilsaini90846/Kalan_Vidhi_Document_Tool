@@ -53,6 +53,7 @@ npm run preview              # 5. serve the production build locally
 npx playwright install chromium   # once, for e2e
 npm run e2e                  # browser tests: desktop + mobile Chrome, axe accessibility scans
 npm run test:all             # typecheck + unit + e2e
+npx playwright test e2e/tools/<slug>.spec.ts   # one tool's tests, e.g. merge-pdf
 npm run docs:formats         # regenerate docs/FORMATS.md from the format registry
 node scripts/make-fixtures.mjs   # regenerate test fixtures (needs: npm i --no-save sharp)
 node scripts/make-icons.mjs      # regenerate PNG icons/social image (needs sharp)

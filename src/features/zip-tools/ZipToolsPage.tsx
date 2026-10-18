@@ -5,6 +5,7 @@ import { ToolPage, btn, btnGhost } from '@/components/common/ToolPage'
 import { ARCHIVE_LIMITS } from '@/services/archive-processing/limits'
 import { useWorker } from '@/hooks/useWorker'
 import type { ArchiveEntry, ArchiveKind } from '@/services/archive-processing/archive'
+import { rulesFor } from '@/services/formats/registry'
 import { downloadBlob } from '@/services/downloads/download'
 import { savedPercent } from '@/services/image-processing/sizing'
 import { AppError, toUserMessage } from '@/types/errors'
@@ -57,7 +58,7 @@ function OpenZip() {
   return (
     <section aria-labelledby="open-zip" className="space-y-4">
       <h2 id="open-zip" className="text-xl font-semibold">Inspect and extract</h2>
-      {!state && <FileDropzone rules={{ accept: ['zip', 'gzip', 'tar'] }} formatsLabel="ZIP, TAR, GZIP (.gz, .tgz, .tar.gz)" multiple={false} label="Drop an archive here" onFiles={(f) => void open(f[0]!.file, f[0]!.kind as ArchiveKind)} />}
+      {!state && <FileDropzone rules={rulesFor('zip-tools')} formatsLabel="ZIP, TAR, GZIP (.gz, .tgz, .tar.gz)" multiple={false} label="Drop an archive here" onFiles={(f) => void open(f[0]!.file, f[0]!.kind as ArchiveKind)} />}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {state && (
         <>
@@ -70,7 +71,7 @@ function OpenZip() {
               <li key={e.name} className="flex items-center justify-between gap-2 rounded px-2 py-1 hover:bg-slate-50">
                 <span className="min-w-0">
                   <span className="block truncate">{e.name}</span>
-                  <span className="text-xs text-slate-500">{formatBytes(e.size)} → {formatBytes(e.compressedSize)}{e.size > 0 ? ` (${savedPercent(e.size, e.compressedSize).toFixed(0)}% saved)` : ''}
+                  <span className="text-xs text-slate-500">{formatBytes(e.size)} → {formatBytes(e.compressedSize)}{e.size > 0 && e.compressedSize < e.size ? ` (${savedPercent(e.size, e.compressedSize).toFixed(0)}% saved)` : ''}
                     {e.encrypted && ' · encrypted'}{e.unsafePath && ' · unsafe path, blocked'}{e.note && ` · ${e.note}`}{RISKY.test(e.name) && ' · executable type: do not run unless you trust the source'}</span>
                 </span>
                 <button className={btnGhost} disabled={!e.extractable} aria-label={`Extract ${e.name}`} onClick={() => void extract(e.name)}>Extract</button>
