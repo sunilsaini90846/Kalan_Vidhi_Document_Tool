@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
+import { BRAND } from '@/config/brand'
 
 const HomePage = lazy(() => import('@/pages/HomePage'))
 const ToolsPage = lazy(() => import('@/pages/ToolsPage'))
@@ -58,7 +59,7 @@ export const routes: RouteObject[] = [
       { path: 'privacy', element: wrap(<PrivacyPage />) },
       { path: 'terms', element: wrap(<TermsPage />) },
       { path: 'about', element: wrap(<AboutPage />) },
-      { path: 'contact', element: wrap(<ContactPage />) },
+      ...(BRAND.contactEmail ? [{ path: 'contact', element: wrap(<ContactPage />) }] : []),
       { path: '404', element: wrap(<NotFoundPage />) },
       { path: '*', element: wrap(<NotFoundPage />) },
     ],

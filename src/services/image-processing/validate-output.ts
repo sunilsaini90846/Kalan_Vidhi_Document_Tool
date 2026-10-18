@@ -50,6 +50,39 @@ export function pixelsMatch(expected: ArrayLike<number>, actual: ArrayLike<numbe
   return true
 }
 
+/** Per-pixel error (Euclidean, premultiplied RGBA, 0–510) above which a pixel is visibly the wrong colour. */
+const VISIBLE_ERROR = 48
+
+/**
+ * How far a lossy result is from its source: PSNR over premultiplied RGBA (colour under transparency does not count)
+ * and the share of pixels that are visibly the wrong colour. PSNR alone hides damage on a mostly flat background:
+ * a UI screenshot reduced to one colour still scores ~18 dB because the white stays white.
+ */
+export function imageDifference(source: ArrayLike<number>, result: ArrayLike<number>): { psnr: number; wrong: number } {
+  if (source.length !== result.length || source.length === 0) return { psnr: 0, wrong: 1 }
+  let se = 0, wrong = 0
+  for (let i = 0; i < source.length; i += 4) {
+    const sa = source[i + 3]! / 255, ra = result[i + 3]! / 255
+    const dr = source[i]! * sa - result[i]! * ra, dg = source[i + 1]! * sa - result[i + 1]! * ra, db = source[i + 2]! * sa - result[i + 2]! * ra
+    const da = source[i + 3]! - result[i + 3]!
+    const e = dr * dr + dg * dg + db * db + da * da
+    se += e
+    if (e > VISIBLE_ERROR * VISIBLE_ERROR) wrong++
+  }
+  const px = source.length / 4
+  return { psnr: se === 0 ? Infinity : 10 * Math.log10((255 * 255 * 4 * px) / se), wrong: wrong / px }
+}
+
+/**
+ * Colour reduction is only offered while the result still looks like the source: at least 26 dB and at most 1% of
+ * pixels visibly off. Median cut to 128–256 colours scores 28–52 dB with under 1% off on photos and screenshots;
+ * a collapsed palette or a heavily posterized full-spectrum image fails.
+ */
+export function looksLikeSource(source: ArrayLike<number>, result: ArrayLike<number>): boolean {
+  const d = imageDifference(source, result)
+  return d.psnr >= 26 && d.wrong <= 0.01
+}
+
 /** Decodes a PNG blob back to RGBA, so the encoder's output can be compared with what it was given. */
 export async function decodeToRgba(blob: Blob): Promise<Uint8ClampedArray> {
   const bmp = await createImageBitmap(blob, { imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' })

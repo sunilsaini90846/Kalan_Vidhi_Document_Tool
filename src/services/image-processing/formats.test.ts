@@ -150,7 +150,39 @@ describe('PNG encoder', () => {
   })
 })
 
-import { pixelsMatch } from './validate-output'
+describe('PNG colour reduction keeps images recognisable', () => {
+  const screenshot = (() => { const d = decodePng(fx('ui-screenshot.png')); return { data: d.rgba, width: d.width, height: d.height } })()
+
+  it.each([256, 128])('a mostly white UI screenshot keeps all %i colours (it used to collapse to 1–2)', (n) => {
+    const q = quantize(screenshot, n)
+    expect(q.exact).toBe(false)
+    expect(q.palette.length / 4).toBe(n)
+    const d = imageDifference(screenshot.data, reconstruct(q, screenshot.width, screenshot.height))
+    expect(d.psnr).toBeGreaterThan(45)
+    expect(d.wrong).toBe(0)
+  })
+  it('splits off a dominant colour that sorts last instead of leaving an empty box', () => {
+    // 90% white (the maximum on every channel) plus a dark gradient: every median cut puts white at the far end
+    const img = image(100, 100, (x, y) => (y < 90 ? [255, 255, 255, 255] : [x * 2, 40 + x, 200 - x, 255]))
+    const q = quantize(img, 16)
+    expect(q.palette.length / 4).toBe(16)
+    expect(imageDifference(img.data, reconstruct(q, 100, 100)).wrong).toBe(0)
+  })
+  it('rejects a collapsed palette and heavy posterization, accepts a faithful reduction', () => {
+    const flat = new Uint8Array(screenshot.data.length).fill(255) // what the 1-colour bug produced: almost all white
+    expect(looksLikeSource(screenshot.data, flat)).toBe(false)
+    const wheel = image(200, 200, (x, y) => { const h = Math.atan2(y - 100, x - 100) * 3, r = Math.hypot(x - 100, y - 100) / 142; return [0, 2, 4].map((k) => Math.round(255 * (0.15 + 0.7 * r) * (0.5 + 0.5 * Math.cos(h - k)))).concat(255) as [number, number, number, number] })
+    expect(looksLikeSource(wheel.data, reconstruct(quantize(wheel, 16), 200, 200))).toBe(false)
+    expect(looksLikeSource(wheel.data, reconstruct(quantize(wheel, 256), 200, 200))).toBe(true)
+    expect(looksLikeSource(screenshot.data, reconstruct(quantize(screenshot, 128), screenshot.width, screenshot.height))).toBe(true)
+  })
+  it('ignores colour under full transparency', () => {
+    expect(imageDifference([1, 2, 3, 0], [250, 250, 250, 0]).wrong).toBe(0)
+    expect(imageDifference([1, 2, 3, 255], [250, 250, 250, 255]).wrong).toBe(1)
+  })
+})
+
+import { imageDifference, looksLikeSource, pixelsMatch } from './validate-output'
 describe('pixelsMatch', () => {
   it('requires opaque pixels to be exact', () => {
     expect(pixelsMatch([10, 20, 30, 255], [10, 20, 30, 255])).toBe(true)

@@ -100,28 +100,29 @@ export function quantize({ data, width, height }: Rgba, maxColors: number): Quan
   for (let b = 0; b < BINS; b++) if (count[b]) used.push(b)
   const mean = (b: number) => { const c = count[b]!; return [sr[b]! / c, sg[b]! / c, sb[b]! / c, sa[b]! / c] as const }
 
-  interface Box { bins: number[]; total: number }
-  const range = (bx: Box) => {
+  interface Box { bins: number[]; total: number; channel: number; score: number }
+  const box = (bins: number[]): Box => {
     const lo = [255, 255, 255, 255], hi = [0, 0, 0, 0]
-    for (const b of bx.bins) { const m = mean(b); for (let c = 0; c < 4; c++) { if (m[c]! < lo[c]!) lo[c] = m[c]!; if (m[c]! > hi[c]!) hi[c] = m[c]! } }
-    let ch = 0, best = -1
-    for (let c = 0; c < 4; c++) { const r = (hi[c]! - lo[c]!) * (c === 3 ? 1.2 : 1); if (r > best) { best = r; ch = c } }
-    return { channel: ch, spread: best }
+    let total = 0
+    for (const b of bins) { total += count[b]!; const m = mean(b); for (let c = 0; c < 4; c++) { if (m[c]! < lo[c]!) lo[c] = m[c]!; if (m[c]! > hi[c]!) hi[c] = m[c]! } }
+    let channel = 0, spread = -1
+    for (let c = 0; c < 4; c++) { const r = (hi[c]! - lo[c]!) * (c === 3 ? 1.2 : 1); if (r > spread) { spread = r; channel = c } }
+    return { bins, total, channel, score: bins.length < 2 ? 0 : spread * Math.sqrt(total) }
   }
-  let boxes: Box[] = [{ bins: used, total: n }]
+  const boxes: Box[] = [box(used)]
   while (boxes.length < maxColors) {
-    let pick = -1, bestScore = 0, pickCh = 0
-    boxes.forEach((bx, i) => { if (bx.bins.length < 2) return; const r = range(bx); const score = r.spread * Math.sqrt(bx.total); if (score > bestScore) { bestScore = score; pick = i; pickCh = r.channel } })
+    let pick = -1, bestScore = 0
+    boxes.forEach((bx, i) => { if (bx.score > bestScore) { bestScore = bx.score; pick = i } })
     if (pick < 0) break
     const bx = boxes[pick]!
-    const sorted = [...bx.bins].sort((x, y) => mean(x)[pickCh]! - mean(y)[pickCh]!)
+    const sorted = [...bx.bins].sort((x, y) => mean(x)[bx.channel]! - mean(y)[bx.channel]!)
     let acc = 0, cut = 0
     for (; cut < sorted.length - 1; cut++) { acc += count[sorted[cut]!]!; if (acc >= bx.total / 2) break }
-    const left = sorted.slice(0, cut + 1), right = sorted.slice(cut + 1)
-    const sum = (bins: number[]) => bins.reduce((s, b) => s + count[b]!, 0)
-    boxes.splice(pick, 1, { bins: left, total: sum(left) }, { bins: right, total: sum(right) })
+    // A dominant colour at the far end (a white UI background) would otherwise leave the right half empty, and the
+    // unchanged box would be "split" again and again until the palette was full of empty boxes: 1–2 colours in total.
+    cut = Math.min(cut, sorted.length - 2)
+    boxes.splice(pick, 1, box(sorted.slice(0, cut + 1)), box(sorted.slice(cut + 1)))
   }
-  boxes = boxes.filter((b) => b.bins.length)
   const palette = new Uint8Array(boxes.length * 4)
   boxes.forEach((bx, i) => {
     let r = 0, g = 0, b = 0, a = 0, t = 0

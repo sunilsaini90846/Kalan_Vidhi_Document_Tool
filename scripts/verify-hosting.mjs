@@ -7,7 +7,8 @@ if (!base) { console.error('Usage: node scripts/verify-hosting.mjs <base-url>');
 
 const registry = readFileSync('src/tools/registry.ts', 'utf8')
 const tools = [...registry.matchAll(/slug: '([^']+)'[^\n]*?status: 'available'/g)].map((m) => `/${m[1]}`)
-const routes = ['/', '/tools', ...tools, '/privacy', '/terms', '/about', '/contact', '/404']
+const contact = /contactEmail: '([^']+)'/.test(readFileSync('src/config/brand.ts', 'utf8')) ? ['/contact'] : [] // only routed once set
+const routes = ['/', '/tools', ...tools, '/privacy', '/terms', '/about', ...contact, '/404']
 
 try { await fetch(base + '/') } catch (e) { console.error(`Cannot reach ${base} (${e.cause?.code ?? e.message}). Is the server running?`); process.exit(2) }
 

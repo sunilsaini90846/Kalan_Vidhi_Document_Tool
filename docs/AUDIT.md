@@ -72,7 +72,7 @@ Not tested: real 100 MB+ files and real mobile-device memory limits; non-Chromiu
 - PNG palette reduction has no dithering (banding on gradients; labelled lossy).
 - ICC profiles are not preserved (converted to sRGB).
 - Image-to-PDF still has no crop tool; no PDF page preview (engine candidates in PDF-ENGINES.md).
-- Contact page is still a placeholder.
+- No public contact address yet: the Contact page and footer link are hidden until `BRAND.contactEmail` is set.
 - PDF Compressor only recompresses JPEGs; `browser-image-compression` dependency is unused.
 - HEIC, 7Z, RAR, RTF, audio/video unsupported (reasons in FORMATS.md).
 - No true HTTP 404 for unknown URLs (static SPA fallback; the in-app 404 is `noindex`).
@@ -87,3 +87,33 @@ npx firebase-tools deploy --only hosting --project lazytodisciplinedapp
 npm run verify:hosting -- https://document-operations.web.app
 ```
 Rollback: Firebase console → Hosting → `document-operations` → release history → **Rollback** on the previous release (instant, no rebuild); or `git revert` the release commit, rebuild and redeploy. The previous release stays in history.
+
+## 9. QA follow-up (2026-10-18): fixes and test plan
+Issues from the QA pass on the deployed site, in priority order. All are fixed in the working tree, **not yet deployed**.
+
+| # | Issue | Root cause | Fix | Regression tests |
+|---|---|---|---|---|
+| 1 (High) | Balanced/Low Size turned a colourful PNG screenshot into "PNG reduced to 2 colours", nearly blank | Median cut split each box at the pixel median; when a dominant colour (a white UI background) sorted last, the right half was empty and the unchanged box was "split" again until the palette was full of empty boxes. Reproduced on the live site: `fixtures/ui-screenshot.png` became **1 colour, 185 B** | Cut clamped so both halves are non-empty (`png.ts`); box ranges cached (≈3.5× faster). New safeguard: a reduced palette is only offered if it still looks like the source (`looksLikeSource`: ≥ 26 dB PSNR **and** ≤ 1% of pixels visibly off), otherwise lossless only, or the original is kept. PSNR alone is not enough: the 1-colour result still scored 18 dB because the white stayed white | Unit: screenshot keeps 256/128 colours (≥ 45 dB), dominant-colour split, gate rejects collapse and posterization. E2E: Balanced/Low Size on the screenshot (max pixel diff < 40), gate fallback is pixel-identical |
+| 2 (Medium) | Quality showed 90%/lossless on one visit, 75%/256 colours on another | The default was already 75% on every fresh load (live bundle checked). But moving the slider always selected "Balanced", so at 90% the label said "lossless" while the Balanced button and help text said "75%; 256 colours" | Preset is derived from the quality, so button, label and help text always agree; any other value is "Custom". Settings start at Balanced on every visit (no persistence). Resizer/Converter keep 90% on purpose | E2E: default, slider-to-preset, Custom, reset after navigating away |
+| 3 (Low) | Contact page was a placeholder | No contact address exists yet | `BRAND.contactEmail` (brand.ts): until it is set, there is no route, footer link or sitemap entry; setting it publishes a real page | E2E: no footer link, `/contact` is 404 |
+| 4 (Low) | Archive tools missing from the header | Header links were hard-coded | Header links generated from `CATEGORY_LABEL`. Full header from 1024 px (the 4th link wrapped labels at 768–880 px); menu button below. Only the current category gets `aria-current` (NavLink marked all of them on `/tools`) | E2E: all four categories, desktop and mobile, current marking |
+| 5 | Tools search dropped keystrokes | **Real bug, not an automation artifact**: the field was bound to the URL, which React Router updates in a transition; a controlled input re-renders with the stale value while that is pending ("zip" became "p" on mobile, "zp" on desktop) | Field owns its text and filters instantly; the URL is written after 250 ms of no typing; external changes (header search, back/forward) still update the field | E2E: fast typing (stress-tested 40×), query kept across category change, header search replaces it |
+
+Also fixed: "1 colours" plural; a lossy note being removed by `notes.pop()` when the lossy attempt was exact (it could drop an unrelated note such as "first frame only").
+
+### Test plan for areas the QA pass did not cover
+| Area | Covered by | Status |
+|---|---|---|
+| Files over 100 MB; more than 50 files | `e2e/limits.spec.ts` (real sparse 101 MB file; 52 files, then 1 more) | **added** |
+| Corrupt and empty files | `image-compression.spec.ts` (invalid, corrupt, truncated), `quality.spec.ts`, `zip-tools.spec.ts` (empty), PDF tool specs | covered |
+| Encrypted/password-protected PDFs; PDFs without JPEGs | `pdf-compressor.spec.ts` (encrypted/signed/truncated/fake; text-only PDF says nothing can be reduced), merge/split/rotate/extract specs | covered |
+| Animated GIF, APNG, WebP and first-frame-only | `image-compression.spec.ts`, `image-formats.spec.ts`, `image-to-pdf.spec.ts` | covered |
+| JPG/WebP compression, transparent PNGs, HEIC rejection | `image-compression.spec.ts` (JPEG, WebP, alpha with 4 MIME variants), `image-formats.spec.ts` (HEIC message) | covered |
+| TAR/GZIP inspection; `../` and other unsafe ZIP paths | `zip-tools.spec.ts` (unsafe paths, TAR traversal and links, bombs), `office-zip.spec.ts` (zip-slip) | covered |
+| Download buttons and downloaded-file integrity | every tool spec reads the download back (format, dimensions, bytes, pixel equality) | covered |
+| Mobile layout | all routes load without horizontal scroll on Pixel 7 (`navigation.spec.ts`); header checked at 768–1280 px by hand | covered (emulated); real devices **not tested** |
+| Keyboard accessibility | `quality.spec.ts` (skip link, mobile menu by keyboard), axe on every route | partial: full keyboard-only tool workflows **not tested** |
+| Header search box | `navigation.spec.ts` (header search on the tools page) | **added** |
+| Non-Chromium browsers, screen readers | none | **not tested** (see §6) |
+
+Run on 2026-10-18 against the local production build (`vite preview`): typecheck pass, **241** unit tests passed, **573** Playwright tests passed + 1 skipped (desktop + mobile Chrome). Not re-run on the Firebase emulator: `firebase.json` is unchanged.

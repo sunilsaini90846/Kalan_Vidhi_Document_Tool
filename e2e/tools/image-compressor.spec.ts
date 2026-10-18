@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import { addImages, decodeInBrowser, downloadRow, isJpeg, row, sizeFromRow, uploadFixture, waitDone } from '../helpers'
+import { addImages, decodeInBrowser, downloadRow, fixtureBytes, isJpeg, isPng, maxPixelDiff, row, sizeFromRow, uploadFixture, waitDone } from '../helpers'
+import { upload } from '../tool-kit'
 
 const run = (page: Page, n = 1) => page.getByRole('button', { name: new RegExp(`^Compress ${n} image`) }).click()
 
@@ -23,6 +24,33 @@ test.describe('Image Compressor', () => {
     }
     expect(sizes['Low Size']).toBeLessThan(sizes['Balanced']!)
     expect(sizes['Balanced']).toBeLessThan(sizes['High Quality']!)
+  })
+
+  test('quality always opens on Balanced, and the preset, label and help text agree with the slider', async ({ page }) => {
+    const help = page.getByText(/If the first try is not smaller/)
+    const pressed = page.locator('button[aria-pressed=true]')
+    const expectBalanced = async () => {
+      await expect(page.getByText(/^Quality:/)).toHaveText('Quality: 75% · PNG: 256 colours (lossy)')
+      await expect(pressed).toHaveText('Balanced')
+      await expect(help).toContainText('Balanced: JPG/WebP quality 75%; PNG reduced to 256 colours (lossy)')
+    }
+    await page.goto('/image-compressor')
+    await uploadFixture(page, 'photo.png', { mime: 'image/png' })
+    await expectBalanced()
+
+    await page.getByLabel('Quality').fill('0.9') // dragging onto a preset's value selects that preset
+    await expect(page.getByText(/^Quality:/)).toHaveText('Quality: 90% · PNG: lossless')
+    await expect(pressed).toHaveText('High Quality')
+    await expect(help).toContainText('High Quality: JPG/WebP quality 90%; PNG kept lossless')
+    await page.getByLabel('Quality').fill('0.6') // anything else is Custom, never a preset whose numbers do not match
+    await expect(pressed).toHaveCount(0)
+    await expect(help).toContainText('Custom: JPG/WebP quality 60%; PNG reduced to 128 colours (lossy)')
+
+    // settings are per visit: another tool and back starts on Balanced again
+    await page.goto('/image-resizer')
+    await page.goto('/image-compressor')
+    await uploadFixture(page, 'photo.png', { mime: 'image/png' })
+    await expectBalanced()
   })
 
   test('batch: per-file results, individual downloads and a ZIP of all', async ({ page }) => {
@@ -73,6 +101,45 @@ test.describe('Image Compressor', () => {
     await run(page, 10)
     await page.getByRole('button', { name: 'Cancel' }).click()
     await expect(page.getByRole('button', { name: /^Compress \d+ images?/ })).toBeEnabled()
+  })
+
+  for (const [preset, colours] of [['Balanced', 256], ['Low Size', 128]] as const) {
+    test(`${preset}: a colourful UI screenshot keeps ${colours} colours and still looks like the original`, async ({ page }) => {
+      await page.goto('/image-compressor')
+      await uploadFixture(page, 'ui-screenshot.png', { mime: 'image/png' })
+      await page.getByRole('button', { name: preset, exact: true }).click()
+      await run(page); await waitDone(page, 'ui-screenshot.png')
+      await expect(row(page, 'ui-screenshot.png')).toContainText(`PNG reduced to ${colours} colours (lossy)`)
+      const out = await downloadRow(page, 'ui-screenshot.png')
+      expect(isPng(out.bytes)).toBe(true)
+      expect(out.bytes.length).toBeLessThan(fixtureBytes('ui-screenshot.png').length)
+      // the bug produced a nearly blank image (whole buttons turned white); a faithful palette stays close everywhere
+      expect(await maxPixelDiff(page, fixtureBytes('ui-screenshot.png'), out.bytes)).toBeLessThan(40)
+    })
+  }
+
+  test('colour reduction that would visibly change the image is skipped, not offered', async ({ page }) => {
+    await page.goto('/image-compressor')
+    // a full-spectrum colour wheel cannot survive 64 colours without dithering
+    const wheel = Buffer.from(await page.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 300; c.height = 300
+      const ctx = c.getContext('2d')!
+      const hue = ctx.createConicGradient(0, 150, 150)
+      for (let i = 0; i <= 6; i++) hue.addColorStop(i / 6, `hsl(${i * 60} 100% 50%)`)
+      ctx.fillStyle = hue; ctx.fillRect(0, 0, 300, 300)
+      const shade = ctx.createRadialGradient(150, 150, 0, 150, 150, 212)
+      shade.addColorStop(0, 'rgba(0,0,0,0.85)'); shade.addColorStop(0.5, 'rgba(0,0,0,0)'); shade.addColorStop(1, 'rgba(255,255,255,0.85)')
+      ctx.fillStyle = shade; ctx.fillRect(0, 0, 300, 300)
+      return c.toDataURL('image/png').split(',')[1]!
+    }), 'base64')
+    await upload(page, 'wheel.png', wheel, { mime: 'image/png' })
+    await page.getByLabel('Quality').fill('0.4') // 64 colours
+    await run(page); await waitDone(page, 'wheel.png')
+    await expect(row(page, 'wheel.png')).toContainText('would visibly change it, so colour reduction was skipped')
+    await expect(row(page, 'wheel.png')).not.toContainText('PNG reduced to')
+    // either a lossless PNG (pixel-identical) or, if that is not smaller, the untouched original
+    const out = await downloadRow(page, 'wheel.png')
+    expect(await maxPixelDiff(page, wheel, out.bytes)).toBe(0)
   })
 
   test('result is a real, decodable image at the original dimensions (resize is opt-in)', async ({ page }) => {

@@ -31,8 +31,10 @@ export const AboutPage = () => (
     <p>It has no accounts and no backend. Files are processed on your device by the tools marked available, and each tool page states what it can and cannot do, including formats it does not support.</p>
   </Page>
 )
+/** Routed only when BRAND.contactEmail is set. */
 export const ContactPage = () => (
   <Page title="Contact" description={`Contact ${BRAND.name}.`}>
-    <p>Contact details will be published here before launch.</p>
+    <p>Questions, bug reports or a file that did not process as expected: email <a className="font-medium text-brand-700 underline" href={`mailto:${BRAND.contactEmail}`}>{BRAND.contactEmail}</a>.</p>
+    <p>Please do not attach private files. The tools never upload your files, and we would rather not receive them by email either; a description of the file type, size and the message you saw is enough.</p>
   </Page>
 )

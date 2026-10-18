@@ -16,11 +16,13 @@ import { useImageBatch, type BatchConfig, type BatchItem } from './useImageBatch
 export type ImageToolMode = ImageMode
 
 const PRESETS = { 'Low Size': 0.5, Balanced: 0.75, 'High Quality': 0.9 } as const
-const PRESET_HELP: Record<keyof typeof PRESETS, string> = {
-  'Low Size': 'JPG/WebP quality 50%; PNG reduced to 128 colours (lossy)',
-  Balanced: 'JPG/WebP quality 75%; PNG reduced to 256 colours (lossy)',
-  'High Quality': 'JPG/WebP quality 90%; PNG kept lossless',
-}
+type Preset = keyof typeof PRESETS
+/** The compressor always opens on Balanced; resizing and converting default to 90% so they do not add visible loss. */
+const DEFAULT_QUALITY: Record<ImageToolMode, number> = { compress: PRESETS.Balanced, resize: 0.9, convert: 0.9 }
+/** The preset is derived from the quality, so the pressed button, the label and the help text can never disagree. */
+const presetOf = (q: number) => (Object.keys(PRESETS) as Preset[]).find((p) => Math.abs(PRESETS[p] - q) < 0.001) ?? null
+const pngSetting = (q: number) => { const n = pngColorsFor(q); return n === 0 ? 'PNG kept lossless' : `PNG reduced to ${n} colours (lossy)` }
+const describeQuality = (q: number) => `JPG/WebP quality ${Math.round(q * 100)}%; ${pngSetting(q)}`
 const SLUG: Record<ImageToolMode, ToolAcceptSlug> = { compress: 'image-compressor', resize: 'image-resizer', convert: 'image-converter' }
 const FORMATS: { label: string; value: OutputMime }[] = [
   { label: 'JPG (lossy, no transparency)', value: 'image/jpeg' }, { label: 'PNG (lossless, keeps transparency)', value: 'image/png' }, { label: 'WebP (lossy, keeps transparency)', value: 'image/webp' },
@@ -30,8 +32,8 @@ const field = 'rounded-md border border-slate-300 px-2 py-1.5'
 export function ImageToolWorkbench({ mode }: { mode: ImageToolMode }) {
   const batch = useImageBatch()
   const urls = useObjectUrls()
-  const [preset, setPreset] = useState<keyof typeof PRESETS>('Balanced')
-  const [quality, setQuality] = useState(mode === 'compress' ? 0.75 : 0.9)
+  const [quality, setQuality] = useState(DEFAULT_QUALITY[mode])
+  const preset = presetOf(quality)
   const [resizeOn, setResizeOn] = useState(false)
   const [width, setWidth] = useState('')
   const [height, setHeight] = useState('')
@@ -101,13 +103,13 @@ export function ImageToolWorkbench({ mode }: { mode: ImageToolMode }) {
                 <span>Quality: {Math.round(quality * 100)}%{mode === 'compress' && <span className="text-slate-600"> · PNG: {pngColorsFor(quality) === 0 ? 'lossless' : `${pngColorsFor(quality)} colours (lossy)`}</span>}</span>
                 {mode === 'compress' && (
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {(Object.keys(PRESETS) as (keyof typeof PRESETS)[]).map((p) => (
-                      <button key={p} type="button" aria-pressed={preset === p} title={PRESET_HELP[p]} className={`${btnGhost} ${preset === p ? 'border-brand-600 bg-brand-50' : ''}`} onClick={() => { setPreset(p); setQuality(PRESETS[p]) }}>{p}</button>
+                    {(Object.keys(PRESETS) as Preset[]).map((p) => (
+                      <button key={p} type="button" aria-pressed={preset === p} title={describeQuality(PRESETS[p])} className={`${btnGhost} ${preset === p ? 'border-brand-600 bg-brand-50' : ''}`} onClick={() => setQuality(PRESETS[p])}>{p}</button>
                     ))}
                   </div>
                 )}
-                <input aria-label="Quality" type="range" min={0.1} max={1} step={0.05} value={quality} onChange={(e) => { setQuality(Number(e.target.value)); setPreset('Balanced') }} className="mt-2 w-full" />
-                {mode === 'compress' && <p className="text-xs text-slate-600">{PRESET_HELP[preset]}. If the first try is not smaller than your file, up to two lower JPG/WebP qualities are tried, and the quality actually used is shown.</p>}
+                <input aria-label="Quality" type="range" min={0.1} max={1} step={0.05} value={quality} onChange={(e) => setQuality(Number(e.target.value))} className="mt-2 w-full" />
+                {mode === 'compress' && <p className="text-xs text-slate-600">{preset ?? 'Custom'}: {describeQuality(quality)}. If the first try is not smaller than your file, up to two lower JPG/WebP qualities are tried, and the quality actually used is shown. Settings start at Balanced on every visit.</p>}
                 {mode !== 'compress' && <p className="text-xs text-slate-600">Applies to JPG and WebP output.</p>}
               </div>
             )}

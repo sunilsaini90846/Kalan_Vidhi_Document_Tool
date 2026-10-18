@@ -8,6 +8,11 @@ export const BRAND = {
   /** Written into PDFs this app creates (the PDF "Producer" field). */
   producer: 'Kalan Vidhi Doc Tool',
   themeColor: '#4f46e5',
+  /**
+   * Public contact address. The Contact page, its footer link and its sitemap entry only exist while this is set,
+   * so the site never shows a placeholder. Set a real, monitored address to publish it.
+   */
+  contactEmail: '' as string,
 } as const
 
 export const titleFor = (page: string) => `${page} | ${BRAND.name}`

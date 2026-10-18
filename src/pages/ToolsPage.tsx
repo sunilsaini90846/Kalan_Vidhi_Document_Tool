@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Seo } from '@/components/common/Seo'
 import { ToolCard } from '@/components/common/ToolCard'
@@ -6,22 +6,38 @@ import { CATEGORY_LABEL, TOOLS, type ToolCategory } from '@/tools/registry'
 
 const cats = Object.keys(CATEGORY_LABEL) as ToolCategory[]
 
+/** How long typing must pause before the query is written to the URL. Filtering itself is immediate. */
+const URL_DEBOUNCE_MS = 250
+
 export default function ToolsPage() {
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const rawCat = params.get('category')
   const category = cats.find((c) => c === rawCat) ?? null
 
+  // The field owns its text. React Router applies URL changes in a transition, and an input bound straight to the URL
+  // re-renders with the stale value while that is pending, so fast typing lost keystrokes ("zip" ended up as "p").
+  const [text, setText] = useState(q)
+  const written = useRef(q) // the last query this page wrote to the URL
+  useEffect(() => { if (q !== written.current) { written.current = q; setText(q) } }, [q]) // header search, back/forward
+
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase()
+    const s = text.trim().toLowerCase()
     return TOOLS.filter((t) => (!category || t.category === category) && (!s || `${t.name} ${t.description} ${t.formats}`.toLowerCase().includes(s)))
-  }, [q, category])
+  }, [text, category])
 
   const update = (next: { q?: string; category?: string | null }) => {
     const p = new URLSearchParams(params)
     for (const [k, v] of Object.entries(next)) { if (v) p.set(k, v); else p.delete(k) }
+    if (next.q !== undefined) written.current = next.q
     setParams(p, { replace: true })
   }
+  // Re-armed whenever the URL changes too, so a pending write never restores stale parameters.
+  useEffect(() => {
+    if (text === written.current) return
+    const t = window.setTimeout(() => update({ q: text }), URL_DEBOUNCE_MS)
+    return () => window.clearTimeout(t)
+  }, [text, params]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -29,11 +45,11 @@ export default function ToolsPage() {
       <h1 className="text-3xl font-bold">All tools</h1>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <label><span className="sr-only">Search tools</span>
-          <input type="search" value={q} onChange={(e) => update({ q: e.target.value })} placeholder="Search by name or format (e.g. PDF)" className="w-full rounded-md border border-slate-300 px-3 py-2 md:w-80" />
+          <input type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Search by name or format (e.g. PDF)" className="w-full rounded-md border border-slate-300 px-3 py-2 md:w-80" />
         </label>
         <div role="group" aria-label="Filter by category" className="flex flex-wrap gap-2">
           {[null, ...cats].map((c) => (
-            <button key={c ?? 'all'} type="button" aria-pressed={category === c} onClick={() => update({ category: c })}
+            <button key={c ?? 'all'} type="button" aria-pressed={category === c} onClick={() => update({ category: c, q: text })}
               className={`rounded-full border px-3 py-1 text-sm ${category === c ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-300 bg-white'}`}>
               {c ? CATEGORY_LABEL[c] : 'All'}
             </button>

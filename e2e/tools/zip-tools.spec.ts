@@ -52,7 +52,8 @@ test.describe('ZIP Tools: inspect and extract', () => {
 
   test('ZIP: a decompression bomb is refused before anything is inflated', async ({ page }) => {
     await page.goto('/zip-tools')
-    await open(page, 'bomb.zip', Buffer.from(zipSync({ 'zeros.bin': new Uint8Array(400 * 1024 * 1024) }, { level: 9 })))
+    // 160 MB of zeros: just over the 150 MB per-file limit, yet tiny once zipped
+    await open(page, 'bomb.zip', Buffer.from(zipSync({ 'zeros.bin': new Uint8Array(160 * 1024 * 1024) }, { level: 1 })))
     await expect(page.getByRole('alert')).toContainText(/safe size limit|single file larger/)
     await expect(page.getByRole('button', { name: /^Extract/ })).toHaveCount(0)
   })
@@ -82,13 +83,15 @@ test.describe('ZIP Tools: inspect and extract', () => {
   })
 
   test('damaged inputs fail with a clear message and no crash: truncated tar, gzip bomb, garbage zip, non-archives', async ({ page }) => {
+    test.setTimeout(120_000)
     await page.goto('/zip-tools')
     const bad = async (name: string, data: Uint8Array | Buffer, message: string | RegExp) => {
       await page.reload(); await open(page, name, data)
       await expect(page.getByRole('alert').first()).toContainText(message)
     }
     await bad('cut.tar', fixtureBytes('sample.tar').subarray(0, 700), /truncated|damaged/)
-    await bad('bomb.gz', Buffer.from(gzipSync(new Uint8Array(400 * 1024 * 1024))), /safe size limit/)
+    // 310 MB of zeros: just over the 300 MB total limit
+    await bad('bomb.gz', Buffer.from(gzipSync(new Uint8Array(310 * 1024 * 1024), { level: 1 })), /safe size limit/)
     await bad('cut.gz', fixtureBytes('single.txt.gz').subarray(0, 12), /damaged/)
     await bad('garbage.zip', Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.alloc(40, 9)]), /not a valid ZIP|damaged/)
     await bad('pic.zip', fixtureBytes('photo-q95.jpg'), /is a JPEG file\. This tool accepts ZIP, GZIP/)

@@ -4,7 +4,7 @@ import { MAY_HAVE_ALPHA, decodeImage } from './decode'
 import { encodePngIndexed, encodePngTruecolor, quantize, reconstruct, type Rgba } from './png'
 import { drawToCanvas, encodeCanvas, type OutputMime } from './process'
 import { outputName } from './sizing'
-import { bitmapHasAlpha, decodeToRgba, pixelsMatch, validateImageBlob } from './validate-output'
+import { bitmapHasAlpha, decodeToRgba, looksLikeSource, pixelsMatch, validateImageBlob } from './validate-output'
 import { formatByKind } from '@/services/formats/registry'
 
 export type ImageMode = 'compress' | 'resize' | 'convert'
@@ -125,23 +125,31 @@ async function encodePng(
   const rgba: Rgba = { data: img.data, width, height }
 
   const attempts = colors > 0 ? [colors, 0] : [0]
-  let best: { blob: Blob; method: string } | null = null
+  let best: { blob: Blob; method: string; note?: string } | null = null
   for (const n of attempts) {
-    let bytes: Uint8Array, expected: ArrayLike<number>, method: string
+    let bytes: Uint8Array, expected: ArrayLike<number>, method: string, note: string | undefined
     if (n === 0) {
       bytes = encodePngTruecolor(rgba); expected = img.data; method = 'PNG, lossless'
     } else {
       const q = quantize(rgba, n)
-      bytes = encodePngIndexed(q, width, height); expected = reconstruct(q, width, height)
-      method = q.exact ? `PNG, lossless (${q.palette.length / 4} colours)` : `PNG reduced to ${q.palette.length / 4} colours (lossy)`
-      if (!q.exact) notes.push(`PNG colours were reduced to at most ${n} (no dithering). Gradients may show banding. Choose High Quality for lossless.`)
+      expected = reconstruct(q, width, height)
+      // Never offer a colour-reduced image that no longer looks like the original; lossless (or the original) instead.
+      if (!q.exact && !looksLikeSource(img.data, expected)) {
+        notes.push(`Reducing this image to ${n} colours would visibly change it, so colour reduction was skipped and only lossless compression was tried.`)
+        continue
+      }
+      bytes = encodePngIndexed(q, width, height)
+      const k = q.palette.length / 4, colours = `${k} colour${k === 1 ? '' : 's'}`
+      method = q.exact ? `PNG, lossless (${colours})` : `PNG reduced to ${colours} (lossy)`
+      if (!q.exact) note = `PNG colours were reduced to at most ${n} (no dithering). Gradients may show banding. Choose High Quality for lossless.`
     }
     const blob = new Blob([bytes as BlobPart], { type: 'image/png' })
     // Prove the encoder: decode our own output and compare every pixel with what we meant to write.
     if (!pixelsMatch(expected, await decodeToRgba(blob))) throw new AppError('PROCESSING_FAILED', 'The PNG result did not match the source pixels and was discarded.')
-    if (!best || blob.size < best.blob.size) best = { blob, method }
+    if (!best || blob.size < best.blob.size) best = { blob, method, note }
     if (originalSize === null || blob.size < originalSize) break
-    if (n !== 0) notes.pop() // that lossy attempt was not used
   }
+  // The last attempt is always lossless and never skipped, so there is a result.
+  if (best!.note) notes.push(best!.note)
   return best!
 }
