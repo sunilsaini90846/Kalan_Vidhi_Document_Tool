@@ -2,7 +2,7 @@
 
 Free, privacy-first file compression and conversion from **Kalan Vidhi** (parent brand) – *Doc Tool* is the product. A static React app: no backend, no database, no login. The tools marked available process files locally in your browser.
 
-Live: https://document-operations.web.app (Firebase project `lazytodisciplinedapp`, Hosting site `document-operations`).
+Live: https://doctool.kalanvidhi.com (custom domain; also reachable at https://document-operations.web.app). Firebase project `lazytodisciplinedapp`, Hosting site `document-operations`.
 The product name lives in one place, `src/config/brand.ts`.
 
 ## What it does
@@ -41,6 +41,13 @@ Archive reading counts bytes actually inflated (headers can lie): 5000 entries /
 - Image jobs are sequential (one decoded image in memory at a time); `ImageBitmap`s are closed in `finally`; object URLs are tracked and revoked (`useObjectUrls`).
 - The TIFF decoder (`utif2`, MIT) is a separate lazy chunk loaded only when a TIFF is opened. SVG is rasterized on the main thread (workers cannot load SVG images) after a strict safety check.
 - Format knowledge lives in `src/services/formats/registry.ts`; dropzone rules, error messages, the homepage "Supported formats" section and docs derive from it.
+
+### SEO
+- **One source:** each tool's search title and description live in `src/seo/tool-seo.ts`; `src/seo/meta.ts` builds the route list, titles, descriptions and schema.org data from it and the tool registry. The runtime `Seo` component and the build both read it. A new tool needs an entry there (a unit test fails without one) and the e2e spec checks it.
+- **Static HTML per route:** crawlers and link previews that do not run JavaScript only see static HTML, so `scripts/postbuild.mjs` writes `dist/<route>/index.html` for every available tool and page with its own `<title>`, description, canonical, Open Graph / Twitter tags, JSON-LD (`WebApplication` + `BreadcrumbList` per tool, `WebSite` on the home page) and a `<noscript>` fallback. Firebase serves these at `/<route>` (`"trailingSlash": false` in `firebase.json`; `/<route>/` redirects to it) and `vite preview` is patched to match.
+- **Needs the site URL:** canonical URLs, `og:url`, JSON-LD and `sitemap.xml` all need absolute URLs, so they are only written when `VITE_SITE_URL` is set at build time (see Deploy). Without it you still get per-route titles and descriptions, and the build says so.
+- **Honest copy:** descriptions describe what the tool does and its limits; no savings percentages, no ratings or reviews in structured data (tests enforce both). `/404` is `noindex` and is not in the sitemap.
+- After deploying, submit `/sitemap.xml` in Google Search Console and Bing Webmaster Tools; `npm run verify:hosting` checks each route has a unique title, a description and a canonical that matches its path.
 
 ## Commands
 ```bash
@@ -84,11 +91,11 @@ Preview before going live: `firebase hosting:channel:deploy preview` gives a tem
 5. Submit `https://your-domain/sitemap.xml` in Google Search Console if you want it indexed.
 
 ### Current deployment
-Live at https://document-operations.web.app (Hosting site `document-operations` in Firebase project `lazytodisciplinedapp`; the site is set in `firebase.json`, the project in the git-ignored `.firebaserc`). The project hosts other sites too; `firebase deploy --only hosting` only touches this one because `firebase.json` names it. Redeploy:
+Live at https://doctool.kalanvidhi.com, the custom domain used for canonical URLs and the sitemap; https://document-operations.web.app serves the same build (Hosting site `document-operations` in Firebase project `lazytodisciplinedapp`; the site is set in `firebase.json`, the project in the git-ignored `.firebaserc`). The project hosts other sites too; `firebase deploy --only hosting` only touches this one because `firebase.json` names it. Redeploy:
 ```bash
-VITE_SITE_URL=https://document-operations.web.app npm run build
+VITE_SITE_URL=https://doctool.kalanvidhi.com npm run build
 npx firebase-tools deploy --only hosting --project lazytodisciplinedapp
-npm run verify:hosting -- https://document-operations.web.app
+npm run verify:hosting -- https://doctool.kalanvidhi.com
 ```
 This app intentionally does **not** use the Firebase client SDK or Analytics (no config keys are needed or stored).
 

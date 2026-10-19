@@ -6,6 +6,7 @@ const headers = (src: string) => Object.fromEntries((cfg.headers.find((h: { sour
 describe('firebase.json', () => {
   it('serves the Vite build output', () => expect(cfg.public).toBe('dist'))
   it('rewrites unknown paths to the SPA shell', () => expect(cfg.rewrites).toContainEqual({ source: '**', destination: '/index.html' }))
+  it('serves per-route HTML at the same URL without a trailing-slash redirect (canonical URLs stay exact)', () => expect(cfg.trailingSlash).toBe(false))
   it('revalidates everything by default but caches hashed assets long', () => {
     expect(headers('**')['Cache-Control']).toBe('no-cache')
     expect(headers('/assets/**')['Cache-Control']).toMatch(/max-age=31536000.*immutable/)

@@ -82,9 +82,9 @@ Pre-release checklist (all done except the last two): full diff reviewed, secret
 Remaining: **review and commit** (not done: awaiting approval), **deploy** (not done: awaiting approval).
 ```bash
 git add -A && git commit              # after review
-VITE_SITE_URL=https://document-operations.web.app npm run build
+VITE_SITE_URL=https://doctool.kalanvidhi.com npm run build
 npx firebase-tools deploy --only hosting --project lazytodisciplinedapp
-npm run verify:hosting -- https://document-operations.web.app
+npm run verify:hosting -- https://doctool.kalanvidhi.com
 ```
 Rollback: Firebase console → Hosting → `document-operations` → release history → **Rollback** on the previous release (instant, no rebuild); or `git revert` the release commit, rebuild and redeploy. The previous release stays in history.
 

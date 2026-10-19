@@ -41,7 +41,7 @@ export default function ToolsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
-      <Seo title="All tools" description="Browse free image, PDF, document and archive tools that run in your browser." />
+      <Seo />
       <h1 className="text-3xl font-bold">All tools</h1>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <label><span className="sr-only">Search tools</span>

@@ -24,6 +24,25 @@ for (const path of routes) {
   check(res.status === 200 && (res.headers.get('content-type') ?? '').includes('text/html') && html.includes('id="root"'), `direct navigation ${path}`, `status ${res.status}`)
 }
 
+// SEO: every route must serve its own head (what crawlers without JavaScript see), not the home page's.
+const titles = new Map()
+for (const path of routes.filter((r) => r !== '/404')) {
+  const html = await (await fetch(base + path)).text()
+  const title = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? ''
+  const desc = html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? ''
+  const canonical = html.match(/<link rel="canonical" href="([^"]*)"/)?.[1]
+  check(title !== '' && desc !== '', `SEO title and description ${path}`, `title=${JSON.stringify(title)}`)
+  check(!titles.has(title), `SEO title is unique ${path}`, `same as ${titles.get(title)}`)
+  titles.set(title, path)
+  if (canonical !== undefined) check(new URL(canonical).pathname === path, `SEO canonical matches route ${path}`, canonical)
+}
+if (base.startsWith('https://')) {
+  const sitemap = await fetch(base + '/sitemap.xml')
+  const robotsTxt = await (await fetch(base + '/robots.txt')).text()
+  if (sitemap.status === 200) check(robotsTxt.includes('Sitemap:'), 'robots.txt points at sitemap.xml')
+  else console.log('NOTE  no sitemap.xml: the site was built without VITE_SITE_URL, so there are no canonical URLs or structured data')
+}
+
 const home = await fetch(base + '/')
 const html = await home.text()
 check(/no-cache/.test(home.headers.get('cache-control') ?? ''), 'HTML shell is not cached (no-cache)', String(home.headers.get('cache-control')))

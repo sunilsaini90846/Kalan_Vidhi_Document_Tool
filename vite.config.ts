@@ -2,6 +2,8 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { existsSync, readFileSync } from 'node:fs'
+import { extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
@@ -17,8 +19,29 @@ function siteUrl(): Plugin {
   }
 }
 
+/**
+ * `vite preview` only serves dist/<route>/index.html for URLs with a trailing slash. Firebase Hosting (trailingSlash: false)
+ * serves it at /<route>, so mirror that here; otherwise preview and the e2e suite would see the SPA shell instead.
+ */
+function routeHtmlPreview(): Plugin {
+  return {
+    name: 'route-html-preview',
+    configurePreviewServer(server) {
+      const dist = resolve(server.config.build.outDir)
+      server.middlewares.use((req, res, next) => {
+        const path = decodeURIComponent((req.url ?? '/').split('?')[0]!).replace(/\/+$/, '')
+        const file = resolve(dist, `.${path}`, 'index.html')
+        if (path && !extname(path) && file.startsWith(dist + sep) && existsSync(file)) {
+          res.setHeader('Content-Type', 'text/html')
+          res.end(readFileSync(file))
+        } else next()
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), siteUrl()],
+  plugins: [react(), tailwindcss(), siteUrl(), routeHtmlPreview()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   build: { outDir: 'dist', sourcemap: false },
   worker: { format: 'es' },

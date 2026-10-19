@@ -130,7 +130,7 @@ test.describe('Kalan Vidhi Doc Tool branding', () => {
     await expect(page.getByRole('contentinfo')).toContainText('Kalan Vidhi')
     await expect(page).toHaveTitle(/Kalan Vidhi Doc Tool/)
     await page.goto('/image-compressor')
-    await expect(page).toHaveTitle('Image Compressor | Kalan Vidhi Doc Tool')
+    await expect(page).toHaveTitle('Compress JPG, PNG & WebP Images Online | Kalan Vidhi Doc Tool')
   })
 
   test('static HTML (what social crawlers see) has branded Open Graph tags, favicon and manifest', async ({ request }) => {

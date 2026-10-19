@@ -37,6 +37,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "esbuild": "^0.25.12",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",

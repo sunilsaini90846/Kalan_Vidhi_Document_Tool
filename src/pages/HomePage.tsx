@@ -62,7 +62,7 @@ export default function HomePage() {
   const popular = TOOLS.filter((t) => t.popular)
   return (
     <>
-      <Seo title="Free file compression and conversion" description={BRAND.description} />
+      <Seo />
       <section className="mx-auto max-w-6xl px-4 py-14 text-center">
         <p className="text-sm font-semibold uppercase tracking-widest text-brand-700">{BRAND.name}</p>
         <h1 className="mt-2 text-4xl font-bold tracking-tight md:text-5xl">Free file compression and conversion</h1>

@@ -6,7 +6,7 @@ interface Props { title: string; description: string; about: ReactNode; children
 export function ToolPage({ title, description, about, children }: Props) {
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <Seo title={title} description={description} />
+      <Seo />
       <h1 className="text-3xl font-bold">{title}</h1>
       <p className="mt-2 text-slate-600">{description}</p>
       <div className="mt-6">{children}</div>
