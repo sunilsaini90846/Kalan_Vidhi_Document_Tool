@@ -19,6 +19,7 @@ Release verification (Firebase emulator + e2e under real headers) is in README â
 - Lazy-load every tool route and its processing libs.
 - Heavy processing goes through `src/workers/handlers.ts` + `WorkerClient`, never the main thread. Add new operations there.
 - Every tool has its own spec, `e2e/tools/<slug>.spec.ts` (enforced by `src/tests/tool-coverage.test.ts`); shared builders are in `e2e/tool-kit.ts`, fixtures in `fixtures/`. Tests use real files and read the downloaded output back; e2e/quality.spec.ts also runs axe on every route, so new routes must be added to its list.
+- SEO: the production origin lives in `BRAND.siteUrl` (`src/config/brand.ts`); `VITE_SITE_URL` is only an optional override. `firebase.json` has no catch-all rewrite: every route is prerendered by `scripts/postbuild.mjs` from `src/seo/meta.ts` and unknown URLs get `dist/404.html` with a real 404. A new route must be added there. `npm run build` / `npm run verify:seo` fail on broken sitemap, robots, canonicals or JSON-LD; never weaken them or `test.skip` SEO tests.
 - Don't commit `.firebaserc` or `.env`. Keep the `/assets/**` header rule last in firebase.json (later rules win) and run `verify:hosting` after any header change.
 
 ## Layout

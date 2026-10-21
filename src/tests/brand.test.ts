@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { BRAND, titleFor } from '@/config/brand'
+import { BRAND, resolveSiteUrl, titleFor } from '@/config/brand'
 
 describe('brand', () => {
   it('uses Kalan Vidhi as the parent and Doc Tool as the product', () => {
@@ -19,7 +19,26 @@ describe('brand', () => {
     expect(html).toMatch(/og:site_name" content="Kalan Vidhi Doc Tool"/)
     expect(html.match(/__SITE_URL__/g)?.length).toBeGreaterThan(0)
   })
+  it('production origins: product on the doctool subdomain, parent on the bare domain', () => {
+    expect(BRAND.siteUrl).toBe('https://doctool.kalanvidhi.com')
+    expect(BRAND.parentUrl).toBe('https://kalanvidhi.com')
+  })
   it('PDFs created by the app carry the brand as producer', () => {
     expect(BRAND.producer).toBe('Kalan Vidhi Doc Tool')
+  })
+})
+
+describe('resolveSiteUrl (VITE_SITE_URL is an optional override)', () => {
+  it('falls back to the production URL when unset or blank (GitHub passes "" for an unset variable)', () => {
+    for (const v of [undefined, null, '', '   ']) expect(resolveSiteUrl(v)).toBe(BRAND.siteUrl)
+  })
+  it('accepts a bare origin override and drops a trailing slash', () => {
+    expect(resolveSiteUrl('https://staging.example.com')).toBe('https://staging.example.com')
+    expect(resolveSiteUrl('https://staging.example.com/')).toBe('https://staging.example.com')
+    expect(resolveSiteUrl('http://localhost:4173')).toBe('http://localhost:4173')
+  })
+  it('rejects anything that is not a bare http(s) origin, so a typo fails the build instead of shipping bad canonicals', () => {
+    for (const bad of ['doctool.kalanvidhi.com', 'https://doctool.kalanvidhi.com/app', 'https://doctool.kalanvidhi.com?x=1', 'ftp://example.com', 'https://user:pw@example.com', 'not a url'])
+      expect(() => resolveSiteUrl(bad), bad).toThrow(/VITE_SITE_URL/)
   })
 })

@@ -45,9 +45,11 @@ Archive reading counts bytes actually inflated (headers can lie): 5000 entries /
 ### SEO
 - **One source:** each tool's search title and description live in `src/seo/tool-seo.ts`; `src/seo/meta.ts` builds the route list, titles, descriptions and schema.org data from it and the tool registry. The runtime `Seo` component and the build both read it. A new tool needs an entry there (a unit test fails without one) and the e2e spec checks it.
 - **Static HTML per route:** crawlers and link previews that do not run JavaScript only see static HTML, so `scripts/postbuild.mjs` writes `dist/<route>/index.html` for every available tool and page with its own `<title>`, description, canonical, Open Graph / Twitter tags, JSON-LD (`WebApplication` + `BreadcrumbList` per tool, `WebSite` on the home page) and a `<noscript>` fallback. Firebase serves these at `/<route>` (`"trailingSlash": false` in `firebase.json`; `/<route>/` redirects to it) and `vite preview` is patched to match.
-- **Needs the site URL:** canonical URLs, `og:url`, JSON-LD and `sitemap.xml` all need absolute URLs, so they are only written when `VITE_SITE_URL` is set at build time (see Deploy). Without it you still get per-route titles and descriptions, and the build says so.
-- **Honest copy:** descriptions describe what the tool does and its limits; no savings percentages, no ratings or reviews in structured data (tests enforce both). `/404` is `noindex` and is not in the sitemap.
-- After deploying, submit `/sitemap.xml` in Google Search Console and Bing Webmaster Tools; `npm run verify:hosting` checks each route has a unique title, a description and a canonical that matches its path.
+- **Site URL:** canonical URLs, `og:url`, JSON-LD, `sitemap.xml` and `robots.txt` use `BRAND.siteUrl` (`https://doctool.kalanvidhi.com`, in `src/config/brand.ts`). `VITE_SITE_URL` is only an optional override (e.g. a staging host); unset or blank means the default, and an invalid value fails the build. So a build that forgot the variable can no longer ship without a sitemap.
+- **Honest copy:** descriptions describe what the tool does and its limits; no savings percentages, no ratings or reviews in structured data (tests enforce both). `dist/404.html` (the page Hosting serves with a real HTTP 404) is `noindex`, has no canonical and is not in the sitemap.
+- After deploying, submit `/sitemap.xml` in Google Search Console and Bing Webmaster Tools; `npm run build` and `npm run verify:seo` fail when `sitemap.xml`, `robots.txt` (with its `Sitemap:` line), `404.html`, any route's canonical/metadata or its JSON-LD is missing or wrong; `npm run verify:seo -- <url>` repeats the checks over HTTP (status codes, `Content-Type`, true 404s).
+- **Structured data:** the `Organization` is Kalan Vidhi at `https://kalanvidhi.com` (`BRAND.parentUrl`), not the product subdomain; no logo, contact or social profiles are listed until they exist on the parent site.
+- **Parent site:** the footer and About page link to `kalanvidhi.com`; the reverse link and parent-side changes are listed in `docs/seo/parent-site-links.md`.
 
 ## Commands
 ```bash
@@ -55,7 +57,8 @@ npm install                  # 1. install dependencies (use `npm ci` in CI)
 npm run dev                  # 2. local dev server
 npm test                     # 3. unit/component tests (Vitest)
 npm run typecheck
-npm run build                # 4. production build -> dist (also writes sitemap.xml if VITE_SITE_URL is set)
+npm run build                # 4. production build -> dist (sitemap.xml, robots.txt, 404.html; fails if any SEO artifact is wrong)
+npm run verify:seo           #    re-check dist/ (add a URL to also check a server: -- http://127.0.0.1:5002)
 npm run preview              # 5. serve the production build locally
 npx playwright install chromium   # once, for e2e
 npm run e2e                  # browser tests: desktop + mobile Chrome, axe accessibility scans
@@ -78,7 +81,7 @@ firebase init hosting                # 8. only if you want the wizard: public di
 firebase use --add                   #    pick your project, alias "default"
 cp .firebaserc.example .firebaserc   #    ...or copy the example and edit the project id by hand
 
-VITE_SITE_URL=https://your-domain npm run build   # canonical URLs + sitemap use this (omit until you have a domain)
+npm run build                        # canonical URLs + sitemap default to BRAND.siteUrl; set VITE_SITE_URL only to override
 firebase deploy --only hosting       # 9. deploy
 ```
 Preview before going live: `firebase hosting:channel:deploy preview` gives a temporary URL.
@@ -87,15 +90,16 @@ Preview before going live: `firebase hosting:channel:deploy preview` gives a tem
 1. Firebase console → Hosting → **Add custom domain**, enter your domain.
 2. Add the DNS records Firebase shows (a TXT record to verify ownership, then A records or CNAME) at your DNS provider.
 3. Firebase provisions and renews the HTTPS certificate automatically; this can take from minutes to a day.
-4. Set `VITE_SITE_URL=https://your-domain`, rebuild, redeploy so canonical URLs and `sitemap.xml` are correct.
+4. Set `BRAND.siteUrl` in `src/config/brand.ts` (or `VITE_SITE_URL` for a staging host), rebuild, redeploy so canonical URLs and `sitemap.xml` are correct.
 5. Submit `https://your-domain/sitemap.xml` in Google Search Console if you want it indexed.
 
 ### Current deployment
 Live at https://doctool.kalanvidhi.com, the custom domain used for canonical URLs and the sitemap; https://document-operations.web.app serves the same build (Hosting site `document-operations` in Firebase project `lazytodisciplinedapp`; the site is set in `firebase.json`, the project in the git-ignored `.firebaserc`). The project hosts other sites too; `firebase deploy --only hosting` only touches this one because `firebase.json` names it. Redeploy:
 ```bash
-VITE_SITE_URL=https://doctool.kalanvidhi.com npm run build
+npm run build && npm run verify:seo -- --production
 npx firebase-tools deploy --only hosting --project lazytodisciplinedapp
 npm run verify:hosting -- https://doctool.kalanvidhi.com
+npm run verify:seo -- https://doctool.kalanvidhi.com --no-dist --production
 ```
 This app intentionally does **not** use the Firebase client SDK or Analytics (no config keys are needed or stored).
 
@@ -104,23 +108,25 @@ Run these before every release; all must pass.
 ```bash
 npm ci
 npm run typecheck && npm test && npm audit
-npm run build
+npm run build && npm run verify:seo -- --production   # sitemap, robots, 404.html, canonicals, JSON-LD
 npm run e2e                                           # against the local preview server
 # Verify the real Hosting rules locally (serves dist with firebase.json, no project needed):
 npx firebase-tools emulators:start --only hosting --project demo-kalan-vidhi-doc-tool   # port 5002 if 5000 is busy
-npm run verify:hosting -- http://127.0.0.1:5002       # every route, caching, security headers
+npm run verify:hosting -- http://127.0.0.1:5002       # every route, caching, security headers, real 404s
+npm run verify:seo -- http://127.0.0.1:5002           # sitemap served as XML, robots, canonicals, 404 status codes
 E2E_BASE_URL=http://127.0.0.1:5002 npm run e2e        # full browser suite under the real CSP
 firebase deploy --only hosting
 npm run verify:hosting -- https://your-domain         # same checks against production (includes HTTPS)
+npm run verify:seo -- https://your-domain --no-dist --production   # read-only SEO checks of the live site
 ```
 `verify:hosting` checks that every published route loads on direct navigation/refresh, the HTML shell is `no-cache`, hashed assets are `immutable`, and CSP / `nosniff` / frame headers are present. Rollback: Firebase console → Hosting → release history → **Rollback**.
 
 ### CI / automated deploy (optional)
-`.github/workflows/ci.yml` runs typecheck, unit tests, `npm audit --omit=dev`, build and e2e on every PR and push. On pushes to `main` it also deploys, but only when both are set in the repository settings: secret `FIREBASE_SERVICE_ACCOUNT` (service-account JSON with Firebase Hosting Admin; create it with `firebase init hosting:github` or in Google Cloud IAM) and variable `FIREBASE_PROJECT_ID`. Optional variable `SITE_URL` feeds `VITE_SITE_URL`. No secrets are stored in the repo.
+`.github/workflows/ci.yml` runs typecheck, unit tests, `npm audit --omit=dev`, build and e2e on every PR and push. On pushes to `main` it also deploys, but only when both are set in the repository settings: secret `FIREBASE_SERVICE_ACCOUNT` (service-account JSON with Firebase Hosting Admin; create it with `firebase init hosting:github` or in Google Cloud IAM) and variable `FIREBASE_PROJECT_ID`. Optional variable `SITE_URL` feeds `VITE_SITE_URL` as an override; leave it unset for production. CI builds once, verifies `dist/` with `verify:seo`, runs e2e against that same build (`E2E_PREBUILT=1`, so Playwright cannot rebuild and overwrite the artifact), verifies again, and the deploy job re-verifies the downloaded artifact with `--production` before deploying and checks the live site afterwards. No secrets are stored in the repo.
 
 ## Hosting notes and free-tier limits
 - Firebase Hosting's free (Spark) plan has caps on stored data and monthly/daily data transfer; they are quotas, not "unlimited". Check the current numbers at https://firebase.google.com/pricing before launch. Because files are processed in the browser, only the static site counts toward transfer (1.28 MB on disk in total, about 0.5 MB gzipped; a first visit downloads only the homepage bundle, and each tool page and the worker load on demand).
-- Unknown URLs return the app shell with HTTP 200 (single-page-app fallback); the in-app 404 page sets `noindex`. A true HTTP 404 would need a server-side route list, which this static setup deliberately avoids.
+- There is no SPA fallback rewrite. Every route is prerendered to its own `dist/<route>/index.html` by `scripts/postbuild.mjs`, so Hosting serves those directly and answers every other URL with `dist/404.html` and a real HTTP 404 (the app still boots on it and shows the not-found page). A new route must be added to the registry/`src/seo/meta.ts` so it gets a file; `src/app/router.test.tsx` fails if a route has none.
 - No backend, database, Cloud Functions or authentication is used or required.
 
 ## Limits

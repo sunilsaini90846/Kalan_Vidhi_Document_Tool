@@ -5,7 +5,13 @@ const headers = (src: string) => Object.fromEntries((cfg.headers.find((h: { sour
 
 describe('firebase.json', () => {
   it('serves the Vite build output', () => expect(cfg.public).toBe('dist'))
-  it('rewrites unknown paths to the SPA shell', () => expect(cfg.rewrites).toContainEqual({ source: '**', destination: '/index.html' }))
+  it('has no catch-all rewrite, so unknown URLs get dist/404.html with a real HTTP 404 (every route is its own static file)', () => {
+    expect(cfg.rewrites ?? []).toEqual([])
+    expect(JSON.stringify(cfg.redirects ?? [])).not.toContain('index.html')
+  })
+  it('does not exclude 404.html, the sitemap or robots.txt from the deploy', () => {
+    for (const f of ['404.html', 'sitemap.xml', 'robots.txt']) expect(cfg.ignore.some((g: string) => new RegExp('^' + g.replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$').test(f)), f).toBe(false)
+  })
   it('serves per-route HTML at the same URL without a trailing-slash redirect (canonical URLs stay exact)', () => expect(cfg.trailingSlash).toBe(false))
   it('revalidates everything by default but caches hashed assets long', () => {
     expect(headers('**')['Cache-Control']).toBe('no-cache')

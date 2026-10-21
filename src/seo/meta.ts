@@ -18,11 +18,17 @@ export interface PageSeo {
 }
 
 const STATIC: Array<Omit<PageSeo, 'kind' | 'title'> & { page: string }> = [
-  { path: '/privacy', page: 'Privacy', heading: 'Privacy', description: `How ${BRAND.name} handles your files and data.` },
-  { path: '/terms', page: 'Terms', heading: 'Terms', description: `Terms of use for ${BRAND.name}.` },
-  { path: '/about', page: 'About', heading: 'About', description: `About ${BRAND.name}.` },
+  { path: '/privacy', page: 'Privacy', heading: 'Privacy', description: `How ${BRAND.name} handles your files: supported tools run in your browser, nothing is uploaded, and there are no accounts, analytics or ad scripts.` },
+  { path: '/terms', page: 'Terms', heading: 'Terms', description: `Terms of use for ${BRAND.name}. The free service is provided as is, so keep a backup and check every output before replacing an original file.` },
+  { path: '/about', page: 'About', heading: 'About', description: `About ${BRAND.name}, a free, privacy-first set of file utilities from ${BRAND.parent}. No accounts or backend; each tool states what it can and cannot do.` },
   ...(BRAND.contactEmail ? [{ path: '/contact', page: 'Contact', heading: 'Contact', description: `Contact ${BRAND.name}.` }] : []),
 ]
+
+/**
+ * The page served (with HTTP 404) for any URL that is not a route. It is built into dist/404.html but is not an
+ * indexable route: it is never in `allPages()`, the sitemap or the canonical set, and it is marked noindex.
+ */
+export const NOT_FOUND_PAGE: PageSeo = { path: '/404', kind: 'static', title: titleFor('Page not found'), heading: 'Page not found', description: 'The page you requested does not exist.' }
 
 /** Every indexable route, in sitemap order. `/404` is deliberately absent. */
 export function allPages(): PageSeo[] {
@@ -44,18 +50,24 @@ export const seoForPath = (pathname: string): PageSeo | undefined => {
 
 type Json = Record<string, unknown>
 
-/** schema.org data for a page. Needs absolute URLs, so it is empty until the site URL is known. */
+/**
+ * schema.org data for a page. `site` is the product origin; the publisher is the parent business, whose own
+ * origin is BRAND.parentUrl (not the product subdomain). No logo, contact or social profile is listed because none
+ * is published here; add them only when they exist on the parent site.
+ */
 export function jsonLdFor(page: PageSeo, site: string): Json[] {
-  if (!site) return []
   const url = site + (page.path === '/' ? '/' : page.path)
-  const org: Json = { '@type': 'Organization', name: BRAND.parent, url: `${site}/`, logo: `${site}/icon-512.png` }
+  const org: Json = { '@type': 'Organization', '@id': `${BRAND.parentUrl}/#organization`, name: BRAND.parent, url: `${BRAND.parentUrl}/` }
   const crumb = (items: Array<[string, string]>): Json => ({
     '@context': 'https://schema.org', '@type': 'BreadcrumbList',
     itemListElement: items.map(([name, path], i) => ({ '@type': 'ListItem', position: i + 1, name, item: site + path })),
   })
 
   if (page.kind === 'home') {
-    return [{ '@context': 'https://schema.org', '@type': 'WebSite', name: BRAND.name, url: `${site}/`, description: page.description, inLanguage: 'en', publisher: org }]
+    return [
+      { '@context': 'https://schema.org', '@type': 'WebSite', name: BRAND.name, url: `${site}/`, description: page.description, inLanguage: 'en', publisher: org },
+      { '@context': 'https://schema.org', ...org },
+    ]
   }
   if (page.kind === 'tools') {
     return [

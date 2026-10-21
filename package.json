@@ -13,6 +13,7 @@
     "e2e": "playwright test",
     "audit": "npm audit --omit=dev",
     "verify:hosting": "node scripts/verify-hosting.mjs",
+    "verify:seo": "node scripts/verify-seo.mjs",
     "test:all": "npm run typecheck && npm test && npm run e2e",
     "docs:formats": "node scripts/gen-formats-doc.mjs"
   },

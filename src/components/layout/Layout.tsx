@@ -60,7 +60,7 @@ export function Layout() {
       <main id="main" className="flex-1"><ErrorBoundary><Outlet /></ErrorBoundary></main>
       <footer className="border-t border-slate-200 bg-white py-6 text-sm text-slate-600">
         <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-3 px-4">
-          <span>© {new Date().getFullYear()} {BRAND.parent} · {BRAND.product}. Supported tools process files locally in your browser.</span>
+          <span>© {new Date().getFullYear()} <a href={BRAND.parentUrl} className="underline hover:text-brand-700">{BRAND.parent}</a> · {BRAND.product}. Supported tools process files locally in your browser.</span>
           <nav aria-label="Footer" className="flex gap-4"><Link to="/tools">All tools</Link><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/about">About</Link>{BRAND.contactEmail && <Link to="/contact">Contact</Link>}</nav>
         </div>
       </footer>

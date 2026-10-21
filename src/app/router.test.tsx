@@ -24,3 +24,12 @@ describe('routing', () => {
     TOOLS.filter((t) => t.status === 'available').forEach((t) => expect(paths.has(t.slug)).toBe(true))
   })
 })
+
+describe('routes and the static HTML the host serves', () => {
+  it('every concrete route has a prerendered page, because Firebase Hosting has no SPA fallback (unknown URLs are real 404s)', async () => {
+    const { allPages } = await import('@/seo/meta')
+    const routed = routes[0]!.children!.map((r) => r.path).filter((p): p is string => !!p && p !== '*' && p !== '404').map((p) => `/${p}`)
+    const published = allPages().map((p) => p.path).filter((p) => p !== '/')
+    expect(routed.sort()).toEqual(published.sort())
+  })
+})

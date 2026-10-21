@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { BRAND } from '@/config/brand'
-import { allPages, jsonLdFor, seoForPath, serializeJsonLd } from '@/seo/meta'
+import { NOT_FOUND_PAGE, allPages, jsonLdFor, seoForPath, serializeJsonLd } from '@/seo/meta'
 import { TOOL_SEO } from '@/seo/tool-seo'
 import { TOOLS, availableTools } from '@/tools/registry'
 
@@ -30,6 +30,15 @@ describe('tool search copy', () => {
     })
   }
 
+  for (const page of allPages().filter((p) => p.kind === 'static')) {
+    it(`${page.path}: description is specific and fits a search result`, () => {
+      expect(page.description.length, page.description).toBeGreaterThanOrEqual(80)
+      expect(page.description.length, page.description).toBeLessThanOrEqual(160)
+      expect(page.description).toContain(BRAND.name)
+      expect(page.description).not.toMatch(/\b(guarantee|best|fastest|100%|unlimited|secure)\b/i)
+    })
+  }
+
   it('titles and descriptions are unique across all pages', () => {
     const pages = allPages()
     expect(new Set(pages.map((p) => p.title)).size).toBe(pages.length)
@@ -50,6 +59,11 @@ describe('routes', () => {
     expect(allPages().some((p) => p.path === '/contact')).toBe(Boolean(BRAND.contactEmail))
   })
 
+  it('the 404 page is defined once, is not a route, and never appears in allPages()', () => {
+    expect(NOT_FOUND_PAGE.path).toBe('/404')
+    expect(allPages().map((p) => p.path)).not.toContain(NOT_FOUND_PAGE.path)
+  })
+
   it('looks pages up ignoring a trailing slash, and returns nothing for unknown paths', () => {
     expect(seoForPath('/merge-pdf/')?.path).toBe('/merge-pdf')
     expect(seoForPath('/')?.kind).toBe('home')
@@ -66,8 +80,18 @@ describe('routes', () => {
 })
 
 describe('structured data', () => {
-  it('is empty until the site URL is known (it needs absolute URLs)', () => {
-    for (const p of allPages()) expect(jsonLdFor(p, '')).toEqual([])
+  it('represents Kalan Vidhi at the parent site, not at the product subdomain', () => {
+    for (const p of allPages()) {
+      const orgs = JSON.stringify(jsonLdFor(p, SITE)).match(/"@type":"Organization"[^}]*}/g) ?? []
+      for (const org of orgs) {
+        expect(org).toContain(`"url":"${BRAND.parentUrl}/"`)
+        expect(org).not.toContain(SITE)
+      }
+    }
+    const [webSite, org] = jsonLdFor(seoForPath('/')!, SITE) as [Record<string, any>, Record<string, any>]
+    expect(webSite.publisher).toMatchObject({ name: 'Kalan Vidhi', url: 'https://kalanvidhi.com/' })
+    expect(org).toMatchObject({ '@type': 'Organization', name: 'Kalan Vidhi', url: 'https://kalanvidhi.com/' })
+    expect(JSON.stringify(org)).not.toMatch(/logo|sameAs|contactPoint|telephone/) // none published, so none claimed
   })
 
   it('a tool page has a breadcrumb trail and a free WebApplication, all on absolute URLs', () => {

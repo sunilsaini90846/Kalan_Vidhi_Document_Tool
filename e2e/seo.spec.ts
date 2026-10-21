@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test'
+import { BRAND, resolveSiteUrl } from '../src/config/brand'
 import { allPages } from '../src/seo/meta'
 
 const PAGES = allPages()
+// The origin the build was made for: BRAND.siteUrl unless VITE_SITE_URL overrides it. Never inferred from the page under test.
+const SITE = resolveSiteUrl(process.env.VITE_SITE_URL)
 const attr = (html: string, re: RegExp) => html.match(re)?.[1]?.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
 const jsonLd = (html: string) => [...html.matchAll(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/g)].map((m) => JSON.parse(m[1]!) as Record<string, unknown>)
 
@@ -22,30 +25,61 @@ test.describe('static HTML per route (what crawlers and link previews see withou
     })
   }
 
-  test('canonical URL, og:url and structured data point at the route itself (when a site URL is configured)', async ({ request }) => {
-    const home = await (await request.get('/')).text()
-    test.skip(!home.includes('rel="canonical"'), 'build has no VITE_SITE_URL, so no absolute URLs are emitted')
-    const site = attr(home, /<link rel="canonical" href="([^"]*)\/"/)!
+  test('canonical URL, og:url and structured data point at the route itself, on the site origin', async ({ request }) => {
     for (const page of PAGES) {
       const html = await (await request.get(page.path)).text()
-      const url = site + page.path
+      const url = SITE + (page.path === '/' ? '/' : page.path)
       expect(attr(html, /<link rel="canonical" href="([^"]*)"/), page.path).toBe(url)
       expect(attr(html, /<meta property="og:url" content="([^"]*)"/), page.path).toBe(url)
+      expect(attr(html, /<meta property="og:image" content="([^"]*)"/), page.path).toBe(`${SITE}/og-image.png`)
       const data = jsonLd(html)
       if (page.kind === 'tool') {
         expect(data.map((d) => d['@type']), page.path).toEqual(['BreadcrumbList', 'WebApplication'])
         expect(data[1]).toMatchObject({ url, isAccessibleForFree: true })
       }
-      if (page.kind === 'home') expect(data[0]).toMatchObject({ '@type': 'WebSite' })
+      if (page.kind === 'home') {
+        expect(data.map((d) => d['@type'])).toEqual(['WebSite', 'Organization'])
+        expect(data[1]).toMatchObject({ name: BRAND.parent, url: `${BRAND.parentUrl}/` })
+      }
     }
   })
 
-  test('sitemap lists exactly the indexable routes (when a site URL is configured)', async ({ request }) => {
+  test('sitemap.xml is real XML (not the app shell) and lists exactly the indexable routes', async ({ request }) => {
     const res = await request.get('/sitemap.xml')
-    test.skip(res.status() === 404 || !(res.headers()['content-type'] ?? '').includes('xml'), 'build has no VITE_SITE_URL, so no sitemap is written')
-    const locs = [...(await res.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]!).pathname)
-    expect(locs).toEqual(PAGES.map((p) => p.path))
-    expect(await (await request.get('/robots.txt')).text()).toContain('Sitemap:')
+    expect(res.status()).toBe(200)
+    expect(res.headers()['content-type'] ?? '').toMatch(/^(application|text)\/xml/)
+    const body = await res.text()
+    expect(body.startsWith('<?xml')).toBe(true)
+    expect(body).not.toContain('id="root"')
+    const locs = [...body.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]!)
+    expect(locs).toEqual(PAGES.map((p) => SITE + (p.path === '/' ? '/' : p.path)))
+    expect(locs.every((l) => l.startsWith('https://') || SITE.startsWith('http://'))).toBe(true)
+    expect(locs.some((l) => /\/404\/?$/.test(l))).toBe(false)
+  })
+
+  test('robots.txt allows crawling and names the sitemap', async ({ request }) => {
+    const res = await request.get('/robots.txt')
+    expect(res.status()).toBe(200)
+    const text = await res.text()
+    expect(text).toContain(`Sitemap: ${SITE}/sitemap.xml`)
+    expect(text.match(/^Sitemap:/gim)).toHaveLength(1)
+    expect(text).not.toMatch(/^Disallow:\s*\/\s*$/m)
+  })
+
+  test('unknown URLs are real HTTP 404s that still render the not-found page', async ({ request, page }) => {
+    for (const path of ['/no-such-page', '/tools/no-such-tool', '/404']) {
+      const res = await request.get(path)
+      expect(res.status(), path).toBe(404)
+      const html = await res.text()
+      expect(html, path).toContain('id="root"')
+      expect(html, path).toContain('name="robots" content="noindex"')
+      expect(html, path).not.toContain('rel="canonical"')
+    }
+    expect((await request.get('/assets/does-not-exist.js')).status()).toBe(404)
+    const response = await page.goto('/no-such-page')
+    expect(response?.status()).toBe(404)
+    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible()
+    await expect(page.locator('link[rel="canonical"]')).toHaveCount(0)
   })
 
   test('the 404 page is not in the sitemap and tells search engines not to index it', async ({ page }) => {
@@ -54,6 +88,23 @@ test.describe('static HTML per route (what crawlers and link previews see withou
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex')
     await expect(page.locator('script[data-seo]')).toHaveCount(0)
   })
+})
+
+test.describe('every route works on direct navigation and on refresh (there is no SPA fallback: each route is its own file)', () => {
+  for (const route of PAGES) {
+    test(`${route.path}: 200 on direct load and after reload, with its own canonical`, async ({ page }) => {
+      const first = await page.goto(route.path)
+      expect(first?.status()).toBe(200)
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+      const canonical = SITE + (route.path === '/' ? '/' : route.path)
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical)
+      const second = await page.reload()
+      expect(second?.status()).toBe(200)
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical)
+      await expect(page).toHaveTitle(route.title)
+    })
+  }
 })
 
 test.describe('client-side navigation keeps the head in step with the page', () => {

@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { BRAND, titleFor } from '@/config/brand'
+import { BRAND, resolveSiteUrl, titleFor } from '@/config/brand'
 import { jsonLdFor, seoForPath, serializeJsonLd } from '@/seo/meta'
 
-const SITE = (import.meta.env.VITE_SITE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+const SITE = resolveSiteUrl(import.meta.env.VITE_SITE_URL as string | undefined)
 
 function setMeta(attr: 'name' | 'property', key: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`)
@@ -30,12 +30,16 @@ export function Seo({ title, description, noindex = false }: { title?: string; d
     setMeta('name', 'twitter:title', full)
     setMeta('name', 'twitter:description', desc)
     setMeta('name', 'robots', noindex ? 'noindex' : 'index, follow')
-    if (SITE) {
-      const url = SITE + (page?.path ?? pathname)
+    // Only routes in the sitemap have a canonical URL. The 404 page (and any unknown path) must not claim one.
+    const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
+    if (page) {
+      const url = SITE + (page.path === '/' ? '/' : page.path)
       setMeta('property', 'og:url', url)
-      let link = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
-      if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link) }
+      const link = canonical ?? document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'canonical' }))
       link.href = url
+    } else {
+      canonical?.remove()
+      document.head.querySelector('meta[property="og:url"]')?.remove()
     }
     // Replace the structured data left by the previous page (or by the static HTML) so exactly one set is present.
     document.head.querySelectorAll('script[data-seo]').forEach((n) => n.remove())

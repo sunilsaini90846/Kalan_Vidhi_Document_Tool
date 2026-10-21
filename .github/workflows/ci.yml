@@ -21,11 +21,25 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm audit --omit=dev
+      # The site URL defaults to https://doctool.kalanvidhi.com in src/config/brand.ts; the repository variable SITE_URL
+      # is only an optional override (an unset variable arrives here as an empty string, which means "use the default").
       - run: npm run build
         env:
           VITE_SITE_URL: ${{ vars.SITE_URL }}
+      # Fails the job when sitemap.xml, robots.txt, 404.html, canonicals or structured data are missing or wrong.
+      - run: npm run verify:seo
+        env:
+          VITE_SITE_URL: ${{ vars.SITE_URL }}
       - run: npx playwright install --with-deps chromium
+      # E2E_PREBUILT: serve the build verified above. Playwright must not rebuild dist, which is what gets deployed.
       - run: npm run e2e
+        env:
+          E2E_PREBUILT: '1'
+          VITE_SITE_URL: ${{ vars.SITE_URL }}
+      # Proves the e2e run left the artifact intact before it is uploaded.
+      - run: npm run verify:seo
+        env:
+          VITE_SITE_URL: ${{ vars.SITE_URL }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -50,12 +64,23 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
+      # Last gate before production: the artifact being deployed must carry the production URL everywhere.
+      - run: npm run verify:seo -- --production
+        env:
+          VITE_SITE_URL: ${{ vars.SITE_URL }}
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: ${{ vars.FIREBASE_PROJECT_ID }}
           channelId: live
+      # Read-only check of what is now live (GET requests only). A failure here means: roll back in the Firebase console.
+      - run: npm run verify:seo -- https://doctool.kalanvidhi.com --no-dist --production

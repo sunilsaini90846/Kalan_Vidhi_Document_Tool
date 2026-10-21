@@ -28,6 +28,7 @@ export const TermsPage = () => (
 export const AboutPage = () => (
   <Page title="About">
     <p>{BRAND.name} is a free, privacy-first set of file utilities from {BRAND.parent} that run in your browser. A tool is listed as available only once it works end to end and has been tested.</p>
+    <p>{BRAND.parent} is the business behind this tool. Visit <a className="font-medium text-brand-700 underline" href={BRAND.parentUrl}>kalanvidhi.com</a> to learn more about {BRAND.parent} and its other products.</p>
     <p>It has no accounts and no backend. Files are processed on your device by the tools marked available, and each tool page states what it can and cannot do, including formats it does not support.</p>
   </Page>
 )
